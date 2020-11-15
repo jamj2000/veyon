@@ -22,6 +22,7 @@
  *
  */
 
+#include <QFileInfo>
 #include <QDBusPendingCall>
 #include <QProcess>
 #include <QProcessEnvironment>
@@ -63,9 +64,21 @@ void LinuxCoreFunctions::writeToNativeLoggingSystem( const QString& message, Log
 
 void LinuxCoreFunctions::reboot()
 {
+	systemdLoginManager()->asyncCall( QStringLiteral("Reboot"), false );
+	consoleKitManager()->asyncCall( QStringLiteral("Restart") );
+
 	if( isRunningAsAdmin() )
 	{
-		QProcess::startDetached( QStringLiteral("reboot") );
+		for( const auto& file : { QStringLiteral("/sbin/reboot"), QStringLiteral("/usr/sbin/reboot") } )
+		{
+			if( QFileInfo::exists( file ) )
+			{
+				QProcess::startDetached( file, {} );
+				return;
+			}
+		}
+
+		QProcess::startDetached( QStringLiteral("reboot"), {} );
 	}
 	else
 	{
@@ -76,8 +89,6 @@ void LinuxCoreFunctions::reboot()
 		gnomeSessionManager()->asyncCall( QStringLiteral("RequestReboot") );
 		mateSessionManager()->asyncCall( QStringLiteral("RequestReboot") );
 		xfcePowerManager()->asyncCall( QStringLiteral("Reboot") );
-		systemdLoginManager()->asyncCall( QStringLiteral("Reboot") );
-		consoleKitManager()->asyncCall( QStringLiteral("Restart") );
 	}
 }
 
@@ -87,9 +98,21 @@ void LinuxCoreFunctions::powerDown( bool installUpdates )
 {
 	Q_UNUSED(installUpdates)
 
+	systemdLoginManager()->asyncCall( QStringLiteral("PowerOff"), false );
+	consoleKitManager()->asyncCall( QStringLiteral("Stop") );
+
 	if( isRunningAsAdmin() )
 	{
-		QProcess::startDetached( QStringLiteral("poweroff") );
+		for( const auto& file : { QStringLiteral("/sbin/poweroff"), QStringLiteral("/usr/sbin/poweroff") } )
+		{
+			if( QFileInfo::exists( file ) )
+			{
+				QProcess::startDetached( file, {} );
+				return;
+			}
+		}
+
+		QProcess::startDetached( QStringLiteral("poweroff"), {} );
 	}
 	else
 	{
@@ -100,17 +123,24 @@ void LinuxCoreFunctions::powerDown( bool installUpdates )
 		gnomeSessionManager()->asyncCall( QStringLiteral("RequestShutdown") );
 		mateSessionManager()->asyncCall( QStringLiteral("RequestShutdown") );
 		xfcePowerManager()->asyncCall( QStringLiteral("Shutdown") );
-		systemdLoginManager()->asyncCall( QStringLiteral("PowerOff") );
-		consoleKitManager()->asyncCall( QStringLiteral("Stop") );
 	}
 }
 
 
 
-void LinuxCoreFunctions::raiseWindow( QWidget* widget )
+void LinuxCoreFunctions::raiseWindow( QWidget* widget, bool stayOnTop )
 {
 	widget->activateWindow();
 	widget->raise();
+
+	if( stayOnTop )
+	{
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 9, 0))
+		widget->setWindowFlag( Qt::WindowStaysOnTopHint, true );
+#else
+		widget->setWindowFlags( widget->windowFlags() | Qt::WindowStaysOnTopHint );
+#endif
+	}
 }
 
 
@@ -259,7 +289,7 @@ bool LinuxCoreFunctions::runProgramAsUser( const QString& program, const QString
 	}
 
 	auto process = new UserProcess( uid );
-	QObject::connect( process, QOverload<int>::of( &QProcess::finished ), &QProcess::deleteLater );
+	QObject::connect( process, QOverload<int, QProcess::ExitStatus>::of( &QProcess::finished ), &QProcess::deleteLater );
 	process->start( program, parameters );
 
 	return true;
@@ -342,8 +372,16 @@ LinuxCoreFunctions::DBusInterfacePointer LinuxCoreFunctions::consoleKitManager()
 
 int LinuxCoreFunctions::systemctl( const QStringList& arguments )
 {
-	return QProcess::execute( QStringLiteral("systemctl"),
+	QProcess process;
+	process.start( QStringLiteral("systemctl"),
 							  QStringList( { QStringLiteral("--no-pager"), QStringLiteral("-q") } ) + arguments );
+
+	if( process.waitForFinished() && process.exitStatus() == QProcess::NormalExit )
+	{
+		return process.exitCode();
+	}
+
+	return -1;
 }
 
 

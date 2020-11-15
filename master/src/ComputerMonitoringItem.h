@@ -57,8 +57,6 @@ public:
 
 	void componentComplete() override;
 
-	void autoAdjustComputerScreenSize();
-
 	void setUseCustomComputerPositions( bool enabled ) override;
 	void alignComputers() override;
 
@@ -85,7 +83,7 @@ private:
 
 	QList<NetworkObject::Uid> m_selectedObjects;
 
-signals:
+Q_SIGNALS:
 	void backgroundColorChanged();
 	void textColorChanged();
 	void iconSizeChanged();

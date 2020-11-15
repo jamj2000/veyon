@@ -59,7 +59,8 @@ void NetworkObjectDirectory::setUpdateInterval( int interval )
 const NetworkObjectList& NetworkObjectDirectory::objects( const NetworkObject& parent ) const
 {
 	if( parent.type() == NetworkObject::Type::Root ||
-			parent.type() == NetworkObject::Type::Location )
+		parent.type() == NetworkObject::Type::Location ||
+		parent.type() == NetworkObject::Type::DesktopGroup )
 	{
 		const auto it = m_objects.constFind( parent.modelId() );
 		if( it != m_objects.end() )
@@ -182,7 +183,7 @@ NetworkObject::ModelId NetworkObjectDirectory::rootId() const
 
 
 NetworkObjectList NetworkObjectDirectory::queryObjects( NetworkObject::Type type,
-														NetworkObject::Attribute attribute,
+														NetworkObject::Property property,
 														const QVariant& value )
 {
 	if( hasObjects() == false )
@@ -199,8 +200,8 @@ NetworkObjectList NetworkObjectDirectory::queryObjects( NetworkObject::Type type
 		for( const auto& object : objectList )
 		{
 			if( ( type == NetworkObject::Type::None || object.type() == type ) &&
-				( attribute == NetworkObject::Attribute::None ||
-				  object.isAttributeValueEqual( attribute, value, Qt::CaseInsensitive ) ) )
+				( property == NetworkObject::Property::None ||
+				  object.isPropertyValueEqual( property, value, Qt::CaseInsensitive ) ) )
 			{
 				objects.append( object );
 			}
@@ -247,6 +248,7 @@ void NetworkObjectDirectory::fetchObjects( const NetworkObject& object )
 	if( object.type() == NetworkObject::Type::Root )
 	{
 		update();
+		m_rootObject.setPopulated();
 	}
 
 	setObjectPopulated( object );
@@ -280,20 +282,21 @@ void NetworkObjectDirectory::addOrUpdateObject( const NetworkObject& networkObje
 
 	if( index < 0 )
 	{
-		emit objectsAboutToBeInserted( parent, objectList.count(), 1 );
+		Q_EMIT objectsAboutToBeInserted( parent, objectList.count(), 1 );
 
 		objectList.append( completeNetworkObject );
-		if( completeNetworkObject.type() == NetworkObject::Type::Location )
+		if( completeNetworkObject.type() == NetworkObject::Type::Location ||
+			completeNetworkObject.type() == NetworkObject::Type::DesktopGroup )
 		{
 			m_objects[completeNetworkObject.modelId()] = {};
 		}
 
-		emit objectsInserted();
+		Q_EMIT objectsInserted();
 	}
 	else if( objectList[index].exactMatch( completeNetworkObject ) == false )
 	{
 		objectList.replace( index, completeNetworkObject );
-		emit objectChanged( parent, index );
+		Q_EMIT objectChanged( parent, index );
 	}
 }
 
@@ -308,20 +311,21 @@ void NetworkObjectDirectory::removeObjects( const NetworkObject& parent, const N
 
 	auto& objectList = m_objects[parent.modelId()]; // clazy:exclude=detaching-member
 	int index = 0;
-	QList<NetworkObject::ModelId> groupsToRemove;
+	QList<NetworkObject::ModelId> objectsToRemove;
 
 	for( auto it = objectList.begin(); it != objectList.end(); )
 	{
 		if( removeObjectFilter( *it ) )
 		{
-			if( it->type() == NetworkObject::Type::Location )
+			if( it->type() == NetworkObject::Type::Location ||
+				it->type() == NetworkObject::Type::DesktopGroup )
 			{
-				groupsToRemove.append( it->modelId() );
+				objectsToRemove.append( it->modelId() );
 			}
 
-			emit objectsAboutToBeRemoved( parent, index, 1 );
+			Q_EMIT objectsAboutToBeRemoved( parent, index, 1 );
 			it = objectList.erase( it );
-			emit objectsRemoved();
+			Q_EMIT objectsRemoved();
 		}
 		else
 		{
@@ -330,10 +334,22 @@ void NetworkObjectDirectory::removeObjects( const NetworkObject& parent, const N
 		}
 	}
 
-	for( const auto& groupId : groupsToRemove )
+	for( const auto& groupId : objectsToRemove )
 	{
 		m_objects.remove( groupId );
 	}
+}
+
+
+
+void NetworkObjectDirectory::replaceObjects( const NetworkObjectList& objects, const NetworkObject& parent )
+{
+	for( const auto& object : objects )
+	{
+		addOrUpdateObject( object, parent );
+	}
+
+	removeObjects( parent, [&objects]( const NetworkObject& object ) { return objects.contains( object ) == false; } );
 }
 
 

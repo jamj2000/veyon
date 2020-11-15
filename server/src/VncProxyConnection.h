@@ -39,6 +39,8 @@ public:
 	VncProxyConnection( QTcpSocket* clientSocket, int vncServerPort, QObject* parent );
 	~VncProxyConnection() override;
 
+	void start();
+
 	QTcpSocket* proxyClientSocket() const
 	{
 		return m_proxyClientSocket;
@@ -49,7 +51,7 @@ public:
 		return m_vncServerSocket;
 	}
 
-protected slots:
+protected Q_SLOTS:
 	void readFromClient();
 	void readFromServer();
 
@@ -69,12 +71,14 @@ protected:
 private:
 	static constexpr int ProtocolRetryTime = 250;
 
+	const int m_vncServerPort;
+
 	QTcpSocket* m_proxyClientSocket;
 	QTcpSocket* m_vncServerSocket;
 
 	const QMap<int, int> m_rfbClientToServerMessageSizes;
 
-signals:
+Q_SIGNALS:
 	void clientConnectionClosed();
 	void serverConnectionClosed();
 

@@ -26,13 +26,11 @@
 
 #include <QMainWindow>
 
-#include "Feature.h"
+#include "ComputerControlInterface.h"
 
 class QButtonGroup;
 class QToolButton;
 
-class ComputerSelectPanel;
-class ScreenshotManagementPanel;
 class VeyonMaster;
 
 namespace Ui {
@@ -57,18 +55,26 @@ public:
 
 	void reloadSubFeatures();
 
+	ComputerControlInterfaceList selectedComputerControlInterfaces() const;
+
 protected:
 	void closeEvent( QCloseEvent* event ) override;
+	bool eventFilter( QObject* object, QEvent* event ) override;
 	void keyPressEvent( QKeyEvent *e ) override;
 
 
-private slots:
+private Q_SLOTS:
 	void showAboutDialog();
 
 private:
 	static int buttonId( const Feature& feature )
 	{
 		return static_cast<int>( qHash( feature.uid() ) );
+	}
+
+	static constexpr const char* originalSizePropertyName()
+	{
+		return "originalSize";
 	}
 
 	void addFeaturesToToolBar();
@@ -81,8 +87,5 @@ private:
 	VeyonMaster& m_master;
 
 	QButtonGroup* m_modeGroup;
-
-	ComputerSelectPanel* m_computerSelectPanel;
-	ScreenshotManagementPanel* m_screenshotManagementPanel;
 
 } ;

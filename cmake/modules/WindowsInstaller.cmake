@@ -18,7 +18,7 @@ add_custom_target(windows-binaries
 	COMMAND cp ${CMAKE_SOURCE_DIR}/3rdparty/interception/* ${WINDOWS_INSTALL_FILES}/interception
 	COMMAND cp ${CMAKE_SOURCE_DIR}/3rdparty/ddengine/${DLL_DDENGINE} ${WINDOWS_INSTALL_FILES}
 	COMMAND cp core/veyon-core.dll ${WINDOWS_INSTALL_FILES}
-	COMMAND find . -mindepth 1 -name 'veyon-*.exe' -exec cp '{}' ${WINDOWS_INSTALL_FILES}/ '\;'
+	COMMAND find . -mindepth 2 -name 'veyon-*.exe' -exec cp '{}' ${WINDOWS_INSTALL_FILES}/ '\;'
 	COMMAND mkdir -p ${WINDOWS_INSTALL_FILES}/plugins
 	COMMAND find plugins/ -name '*.dll' -exec cp '{}' ${WINDOWS_INSTALL_FILES}/plugins/ '\;'
 	COMMAND mv ${WINDOWS_INSTALL_FILES}/plugins/lib*.dll ${WINDOWS_INSTALL_FILES}
@@ -33,6 +33,7 @@ add_custom_target(windows-binaries
 	COMMAND cp ${DLLDIR}/libldap.dll ${DLLDIR}/liblber.dll ${WINDOWS_INSTALL_FILES}
 	COMMAND cp ${DLLDIR}/interception.dll ${WINDOWS_INSTALL_FILES}
 	COMMAND cp ${DLLDIR}/liblzo2-2.dll ${WINDOWS_INSTALL_FILES}
+	COMMAND cp ${DLLDIR}/libvncclient.dll ${WINDOWS_INSTALL_FILES}
 	COMMAND cp ${DLLDIR_LIB}/zlib1.dll ${WINDOWS_INSTALL_FILES}
 	COMMAND cp ${DLLDIR_LIB}/libwinpthread-1.dll ${WINDOWS_INSTALL_FILES}
 	COMMAND cp ${DLLDIR_GCC}/libstdc++-6.dll ${WINDOWS_INSTALL_FILES}
@@ -41,6 +42,8 @@ add_custom_target(windows-binaries
 	COMMAND mkdir -p ${WINDOWS_INSTALL_FILES}/crypto
 	COMMAND cp ${DLLDIR_LIB}/qca-qt5/crypto/libqca-ossl.dll ${WINDOWS_INSTALL_FILES}/crypto
 	COMMAND cp ${DLLDIR}/Qt5Core.dll ${DLLDIR}/Qt5Gui.dll ${DLLDIR}/Qt5Widgets.dll ${DLLDIR}/Qt5Network.dll ${DLLDIR}/Qt5Concurrent.dll ${DLLDIR}/Qt5Qml.dll ${DLLDIR}/Qt5Quick.dll ${DLLDIR}/Qt5QuickControls2.dll ${DLLDIR}/Qt5QuickTemplates2.dll ${WINDOWS_INSTALL_FILES}
+	COMMAND mkdir -p ${WINDOWS_INSTALL_FILES}/imageformats
+	COMMAND cp ${DLLDIR_LIB}/qt5/plugins/imageformats/qjpeg.dll ${WINDOWS_INSTALL_FILES}/imageformats
 	COMMAND mkdir -p ${WINDOWS_INSTALL_FILES}/platforms
 	COMMAND cp ${DLLDIR_LIB}/qt5/plugins/platforms/qwindows.dll ${WINDOWS_INSTALL_FILES}/platforms
 	COMMAND mkdir -p ${WINDOWS_INSTALL_FILES}/styles
@@ -67,7 +70,6 @@ add_custom_target(prepare-dev-nsi
 	DEPENDS windows-binaries)
 
 add_custom_target(dev-nsi
-	DEPENDS prepare-dev-nsi
-	DEPENDS create-windows-installer
+	DEPENDS prepare-dev-nsi create-windows-installer
 )
 

@@ -47,6 +47,18 @@ class VEYON_CORE_EXPORT VncConnection : public QThread
 {
 	Q_OBJECT
 public:
+	// intervals and timeouts
+	static constexpr int DefaultThreadTerminationTimeout = 30000;
+	static constexpr int DefaultConnectTimeout = 10000;
+	static constexpr int DefaultReadTimeout = 30000;
+	static constexpr int DefaultConnectionRetryInterval = 1000;
+	static constexpr int DefaultMessageWaitTimeout = 500;
+	static constexpr int DefaultFastFramebufferUpdateInterval = 100;
+	static constexpr int DefaultFramebufferUpdateWatchdogTimeout = 10000;
+	static constexpr int DefaultSocketKeepaliveIdleTime = 1000;
+	static constexpr int DefaultSocketKeepaliveInterval = 500;
+	static constexpr int DefaultSocketKeepaliveCount = 5;
+
 	enum class Quality
 	{
 		Thumbnail,
@@ -115,7 +127,7 @@ public:
 	bool isEventQueueEmpty();
 
 	/** \brief Returns whether framebuffer data is valid, i.e. at least one full FB update received */
-	bool hasValidFrameBuffer() const
+	bool hasValidFramebuffer() const
 	{
 		return m_framebufferState == FramebufferState::Valid;
 	}
@@ -140,7 +152,7 @@ public:
 	void keyEvent( unsigned int key, bool pressed );
 	void clientCut( const QString& text );
 
-signals:
+Q_SIGNALS:
 	void connectionPrepared();
 	void connectionEstablished();
 	void imageUpdated( int x, int y, int w, int h );
@@ -155,17 +167,6 @@ protected:
 	void run() override;
 
 private:
-	// intervals and timeouts
-	static constexpr int ThreadTerminationTimeout = 30000;
-	static constexpr int ConnectTimeout = 5000;
-	static constexpr int ConnectionRetryInterval = 1000;
-	static constexpr int MessageWaitTimeout = 500;
-	static constexpr int FastFramebufferUpdateInterval = 100;
-	static constexpr int FramebufferUpdateWatchdogTimeout = 10000;
-	static constexpr int SocketKeepaliveIdleTime = 1000;
-	static constexpr int SocketKeepaliveInterval = 500;
-	static constexpr int SocketKeepaliveCount = 5;
-
 	// RFB parameters
 	using RfbPixel = uint32_t;
 	static constexpr int RfbBitsPerSample = 8;
@@ -204,6 +205,18 @@ private:
 	static void rfbClientLogNone( const char* format, ... );
 	static void framebufferCleanup( void* framebuffer );
 
+	// intervals and timeouts
+	int m_threadTerminationTimeout{DefaultThreadTerminationTimeout};
+	int m_connectTimeout{DefaultConnectTimeout};
+	int m_readTimeout{DefaultReadTimeout};
+	int m_connectionRetryInterval{DefaultConnectionRetryInterval};
+	int m_messageWaitTimeout{DefaultMessageWaitTimeout};
+	int m_fastFramebufferUpdateInterval{DefaultFastFramebufferUpdateInterval};
+	int m_framebufferUpdateWatchdogTimeout{DefaultFramebufferUpdateWatchdogTimeout};
+	int m_socketKeepaliveIdleTime{DefaultSocketKeepaliveIdleTime};
+	int m_socketKeepaliveInterval{DefaultSocketKeepaliveInterval};
+	int m_socketKeepaliveCount{DefaultSocketKeepaliveCount};
+
 	// states and flags
 	std::atomic<State> m_state{State::Disconnected};
 	std::atomic<FramebufferState> m_framebufferState{FramebufferState::Invalid};
@@ -214,6 +227,7 @@ private:
 	Quality m_quality{Quality::Default};
 	QString m_host{};
 	int m_port{-1};
+	int m_defaultPort{-1};
 
 	// thread and timing control
 	QMutex m_globalMutex{};

@@ -22,6 +22,7 @@
  *
  */
 
+#include "AuthenticationManager.h"
 #include "ServerAuthenticationManager.h"
 #include "ServerAccessControlManager.h"
 #include "VeyonServerProtocol.h"
@@ -40,9 +41,22 @@ VeyonServerProtocol::VeyonServerProtocol( QTcpSocket* socket,
 
 
 
-VeyonServerProtocol::AuthPluginUids VeyonServerProtocol::supportedAuthPluginUids() const
+VeyonServerProtocol::AuthMethodUids VeyonServerProtocol::supportedAuthMethodUids() const
 {
-	return { VeyonCore::config().authenticationPlugin() };
+	const auto authPlugins = VeyonCore::authenticationManager().plugins();
+
+	AuthMethodUids authMethodUids;
+	authMethodUids.reserve( authPlugins.size() );
+
+	for( auto it = authPlugins.constBegin(), end = authPlugins.constEnd(); it != end; ++it )
+	{
+		if( VeyonCore::authenticationManager().isEnabled( it.key() ) )
+		{
+			authMethodUids.append( it.key() );
+		}
+	}
+
+	return authMethodUids;
 }
 
 

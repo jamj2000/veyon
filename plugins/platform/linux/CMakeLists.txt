@@ -6,7 +6,7 @@ find_package(PkgConfig QUIET)
 pkg_check_modules(procps REQUIRED libprocps)
 pkg_check_modules(fakekey libfakekey)
 
-include(BuildPlugin)
+include(BuildVeyonPlugin)
 
 if(NOT fakekey_FOUND)
 set(libfakekey_SOURCES ${libfakekey_DIR}/src/libfakekey.c)
@@ -15,7 +15,7 @@ set_source_files_properties(${libfakekey_SOURCES} PROPERTIES
 	COTIRE_EXCLUDED TRUE)
 endif()
 
-build_plugin(linux-platform
+build_veyon_plugin(linux-platform
 	LinuxPlatformPlugin.cpp
 	LinuxCoreFunctions.cpp
 	LinuxPlatformConfigurationPage.h
@@ -26,6 +26,7 @@ build_plugin(linux-platform
 	LinuxNetworkFunctions.cpp
 	LinuxServiceCore.cpp
 	LinuxServiceFunctions.cpp
+	LinuxSessionFunctions.cpp
 	LinuxUserFunctions.cpp
 	LinuxPlatformPlugin.h
 	LinuxPlatformConfiguration.h
@@ -39,12 +40,15 @@ build_plugin(linux-platform
 	LinuxNetworkFunctions.h
 	LinuxServiceCore.h
 	LinuxServiceFunctions.h
+	LinuxSessionFunctions.h
 	LinuxUserFunctions.h
 	linux.qrc
 	../common/LogonHelper.h
 	../common/LogonHelper.cpp
 	../common/PersistentLogonCredentials.h
 	../common/PersistentLogonCredentials.cpp
+	../common/PlatformSessionManager.h
+	../common/PlatformSessionManager.cpp
 	../common/ServiceDataManager.h
 	../common/ServiceDataManager.cpp
 	${libfakekey_SOURCES}

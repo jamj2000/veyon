@@ -85,12 +85,12 @@ void ComputerControlInterface::start( QSize scaledScreenSize, UpdateMode updateM
 
 		connect( m_vncConnection, &VncConnection::imageUpdated, this, [this]( int x, int y, int w, int h )
 		{
-			emit screenUpdated( QRect( x, y, w, h ) );
+			Q_EMIT screenUpdated( QRect( x, y, w, h ) );
 		} );
 		connect( m_vncConnection, &VncConnection::framebufferUpdateComplete, this, [this]() {
 			resetWatchdog();
 			++m_timestamp;
-			emit scaledScreenUpdated();
+			Q_EMIT scaledScreenUpdated();
 		} );
 
 		connect( m_vncConnection, &VncConnection::stateChanged, this, &ComputerControlInterface::updateState );
@@ -111,11 +111,8 @@ void ComputerControlInterface::start( QSize scaledScreenSize, UpdateMode updateM
 
 void ComputerControlInterface::stop()
 {
-	if( m_connection )
-	{
-		delete m_connection;
-		m_connection = nullptr;
-	}
+	// VeyonConnection destroys itself when VncConnection is destroyed
+	m_connection = nullptr;
 
 	if( m_vncConnection )
 	{
@@ -133,6 +130,13 @@ void ComputerControlInterface::stop()
 
 
 
+bool ComputerControlInterface::hasValidFramebuffer() const
+{
+	return m_vncConnection->hasValidFramebuffer();
+}
+
+
+
 void ComputerControlInterface::setScaledScreenSize( QSize scaledScreenSize )
 {
 	m_scaledScreenSize = scaledScreenSize;
@@ -144,7 +148,7 @@ void ComputerControlInterface::setScaledScreenSize( QSize scaledScreenSize )
 
 	++m_timestamp;
 
-	emit scaledScreenUpdated();
+	Q_EMIT scaledScreenUpdated();
 }
 
 
@@ -173,25 +177,17 @@ QImage ComputerControlInterface::screen() const
 
 
 
-void ComputerControlInterface::setUserLoginName( const QString& userLoginName )
+void ComputerControlInterface::setUserInformation( const QString& userLoginName, const QString& userFullName, int sessionId )
 {
-	if( userLoginName != m_userLoginName )
+	if( userLoginName != m_userLoginName ||
+		userFullName != m_userFullName ||
+		sessionId != m_userSessionId )
 	{
 		m_userLoginName = userLoginName;
-
-		emit userChanged();
-	}
-}
-
-
-
-void ComputerControlInterface::setUserFullName( const QString& userFullName )
-{
-	if( userFullName != m_userFullName )
-	{
 		m_userFullName = userFullName;
+		m_userSessionId = sessionId;
 
-		emit userChanged();
+		Q_EMIT userChanged();
 	}
 }
 
@@ -203,7 +199,7 @@ void ComputerControlInterface::setActiveFeatures( const FeatureUidList& activeFe
 	{
 		m_activeFeatures = activeFeatures;
 
-		emit activeFeaturesChanged();
+		Q_EMIT activeFeaturesChanged();
 	}
 }
 
@@ -337,8 +333,7 @@ void ComputerControlInterface::updateUser()
 	}
 	else
 	{
-		setUserLoginName( {} );
-		setUserFullName( {} );
+		setUserInformation( {}, {}, -1 );
 	}
 }
 
@@ -360,5 +355,5 @@ void ComputerControlInterface::updateActiveFeatures()
 
 void ComputerControlInterface::handleFeatureMessage( const FeatureMessage& message )
 {
-	emit featureMessageReceived( message, weakPointer() );
+	Q_EMIT featureMessageReceived( message, weakPointer() );
 }

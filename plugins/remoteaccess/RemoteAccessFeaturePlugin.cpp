@@ -30,6 +30,7 @@
 #include "RemoteAccessFeaturePlugin.h"
 #include "RemoteAccessPage.h"
 #include "RemoteAccessWidget.h"
+#include "VeyonConfiguration.h"
 #include "VeyonMasterInterface.h"
 
 
@@ -67,11 +68,49 @@ const FeatureList &RemoteAccessFeaturePlugin::featureList() const
 
 
 
+bool RemoteAccessFeaturePlugin::controlFeature( Feature::Uid featureUid, Operation operation, const QVariantMap& arguments,
+											   const ComputerControlInterfaceList& computerControlInterfaces )
+{
+	if( hasFeature( featureUid ) == false ||
+		operation != Operation::Start )
+	{
+		return false;
+	}
+
+	auto viewOnly = featureUid == m_remoteViewFeature.uid();
+	if( remoteControlEnabled() == false )
+	{
+		viewOnly = true;
+	}
+
+	Computer computer;
+	computer.setHostAddress( arguments.value( argToString(Argument::HostName) ).toString() );
+	computer.setName( computer.hostAddress() );
+
+	if( computer.hostAddress().isEmpty() )
+	{
+		if( computerControlInterfaces.isEmpty() == false )
+		{
+			computer = computerControlInterfaces.first()->computer();
+		}
+		else
+		{
+			return false;
+		}
+	}
+
+	new RemoteAccessWidget( ComputerControlInterface::Pointer::create( computer ), viewOnly,
+							remoteViewEnabled() && remoteControlEnabled() );
+
+	return true;
+}
+
+
+
 bool RemoteAccessFeaturePlugin::startFeature( VeyonMasterInterface& master, const Feature& feature,
 											  const ComputerControlInterfaceList& computerControlInterfaces )
 {
-	if( feature.uid() != m_remoteViewFeature.uid() &&
-		feature.uid() != m_remoteControlFeature.uid() )
+	if( hasFeature( feature.uid() ) == false )
 	{
 		return false;
 	}
@@ -104,7 +143,11 @@ bool RemoteAccessFeaturePlugin::startFeature( VeyonMasterInterface& master, cons
 		return false;
 	}
 
-	const auto viewOnly = feature.uid() == m_remoteViewFeature.uid();
+	auto viewOnly = feature.uid() == m_remoteViewFeature.uid();
+	if( remoteControlEnabled() == false )
+	{
+		viewOnly = true;
+	}
 
 	if( master.appContainer() )
 	{
@@ -112,7 +155,8 @@ bool RemoteAccessFeaturePlugin::startFeature( VeyonMasterInterface& master, cons
 	}
 	else
 	{
-		new RemoteAccessWidget( remoteAccessComputer, viewOnly );
+		new RemoteAccessWidget( remoteAccessComputer, viewOnly,
+								remoteViewEnabled() && remoteControlEnabled() );
 	}
 
 	return true;
@@ -141,6 +185,11 @@ CommandLinePluginInterface::RunResult RemoteAccessFeaturePlugin::handle_view( co
 		return NotEnoughArguments;
 	}
 
+	if( remoteViewEnabled() == false )
+	{
+		return InvalidCommand;
+	}
+
 	return remoteAccess( arguments.first(), true ) ? Successful : Failed;
 }
 
@@ -151,6 +200,11 @@ CommandLinePluginInterface::RunResult RemoteAccessFeaturePlugin::handle_control(
 	if( arguments.count() < 1 )
 	{
 		return NotEnoughArguments;
+	}
+
+	if( remoteControlEnabled() == false )
+	{
+		return InvalidCommand;
 	}
 
 	return remoteAccess( arguments.first(), false ) ? Successful : Failed;
@@ -177,10 +231,25 @@ CommandLinePluginInterface::RunResult RemoteAccessFeaturePlugin::handle_help( co
 
 
 
+bool RemoteAccessFeaturePlugin::remoteViewEnabled() const
+{
+	return VeyonCore::config().disabledFeatures().contains( m_remoteViewFeature.uid().toString() ) == false;
+
+}
+
+
+
+bool RemoteAccessFeaturePlugin::remoteControlEnabled() const
+{
+	return VeyonCore::config().disabledFeatures().contains( m_remoteControlFeature.uid().toString() ) == false;
+}
+
+
+
 bool RemoteAccessFeaturePlugin::initAuthentication()
 {
-	return VeyonCore::authenticationManager().configuredPlugin()->initializeCredentials() &&
-			VeyonCore::authenticationManager().configuredPlugin()->checkCredentials();
+	return VeyonCore::authenticationManager().initializeCredentials() &&
+			VeyonCore::authenticationManager().initializedPlugin()->checkCredentials();
 }
 
 
@@ -196,7 +265,13 @@ bool RemoteAccessFeaturePlugin::remoteAccess( const QString& hostAddress, bool v
 	remoteComputer.setName( hostAddress );
 	remoteComputer.setHostAddress( hostAddress );
 
-	new RemoteAccessWidget( ComputerControlInterface::Pointer::create( remoteComputer ), viewOnly );
+	if( remoteControlEnabled() == false )
+	{
+		viewOnly = true;
+	}
+
+	new RemoteAccessWidget( ComputerControlInterface::Pointer::create( remoteComputer ), viewOnly,
+							remoteViewEnabled() && remoteControlEnabled() );
 
 	qApp->exec();
 

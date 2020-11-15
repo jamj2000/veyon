@@ -36,6 +36,8 @@ public:
 
 	virtual ~VncServerPluginInterface() = default;
 
+	virtual QStringList supportedSessionTypes() const = 0;
+
 	/*!
 	 * \brief Create configuration widget for VNC server plugin - used in Configurator
 	 */
@@ -48,7 +50,7 @@ public:
 	 * \param serverPort the port the VNC server should listen at
 	 * \param password the password to be used for VNC authentication
 	 */
-	virtual void runServer( int serverPort, const Password& password ) = 0;
+	virtual bool runServer( int serverPort, const Password& password ) = 0;
 
 	virtual int configuredServerPort() = 0;
 

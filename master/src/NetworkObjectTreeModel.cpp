@@ -136,9 +136,9 @@ QVariant NetworkObjectTreeModel::data( const QModelIndex& index, int role ) cons
 	case UidRole: return networkObject.uid();
 	case NameRole: return networkObject.name();
 	case TypeRole: return QVariant::fromValue( networkObject.type() );
-	case HostAddressRole: return networkObject.hostAddress();
-	case MacAddressRole: return networkObject.macAddress();
-	case DirectoryAddressRole: return networkObject.directoryAddress();
+	case HostAddressRole: return networkObject.property( NetworkObject::Property::HostAddress );
+	case MacAddressRole: return networkObject.property( NetworkObject::Property::MacAddress );
+	case DirectoryAddressRole: return networkObject.property( NetworkObject::Property::DirectoryAddress );
 	default: break;
 	}
 
@@ -200,6 +200,32 @@ void NetworkObjectTreeModel::fetchMore( const QModelIndex& parent )
 
 
 
+Qt::ItemFlags NetworkObjectTreeModel::flags( const QModelIndex& index ) const
+{
+	const auto defaultFlags =  NetworkObjectModel::flags( index );
+
+	if( index.isValid() == false )
+	{
+		return defaultFlags;
+	}
+
+	const auto& networkObject = object( index );
+
+	switch( networkObject.type() )
+	{
+	case NetworkObject::Type::None:
+	case NetworkObject::Type::Host:
+	case NetworkObject::Type::Label:
+		return defaultFlags | Qt::ItemNeverHasChildren;
+	default:
+		break;
+	}
+
+	return defaultFlags;
+}
+
+
+
 void NetworkObjectTreeModel::beginInsertObjects( const NetworkObject& parent, int index, int count )
 {
 	beginInsertRows( objectIndex( parent.modelId() ), index, index+count-1 );
@@ -232,7 +258,7 @@ void NetworkObjectTreeModel::updateObject( const NetworkObject& parent, int row 
 {
 	const auto index = createIndex( row, 0, parent.modelId() );
 
-	emit dataChanged( index, index );
+	Q_EMIT dataChanged( index, index );
 }
 
 

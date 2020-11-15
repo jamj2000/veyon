@@ -25,6 +25,9 @@ if(COMMAND CMAKE_POLICY)
 	if(${CMAKE_VERSION} VERSION_GREATER "3.12.0")
 		cmake_policy(SET CMP0075 NEW)
 	endif()
+	if(${CMAKE_VERSION} VERSION_GREATER "3.14.0")
+		cmake_policy(SET CMP0083 NEW)
+	endif()
 endif()
 
 include(AddFileDependencies)
@@ -152,49 +155,53 @@ find_package(Qt5QuickControls2 REQUIRED)
 if(VEYON_BUILD_ANDROID)
 find_package(Qt5AndroidExtras REQUIRED)
 endif()
-if(VEYON_DEBUG)
-find_package(Qt5Test REQUIRED)
-set(VEYON_DEBUG_LIBRARIES Qt5::Test)
-endif()
 
 # find required libraries
-find_package(ZLIB REQUIRED)
-find_package(PNG REQUIRED)
-find_package(JPEG REQUIRED)
-find_package(LZO REQUIRED)
 find_package(QCA REQUIRED)
-
-set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
-find_package(Threads REQUIRED)
-
-# FindOpenSSL.cmake in recent versions of CMake will only find the DLLs instead
-# of the import libraries if CYGWIN is not set
-set(CYGWIN TRUE)
 find_package(OpenSSL REQUIRED)
-unset(CYGWIN)
 
 # find Linux-specific packages
 if(VEYON_BUILD_LINUX)
 	include(XdgInstall)
 endif()
 
+find_package(LibVNCClient 0.9.13)
 
-### BEGIN: libvncserver configuration
-include(LibVNCServerIntegration)
+if(LibVNCClient_FOUND)
+	include(CheckCSourceCompiles)
+	set(CMAKE_REQUIRED_LIBRARIES LibVNC::LibVNCClient)
+	check_c_source_compiles("
+#include <rfb/rfbclient.h>
 
-set(_RFB_RFBCONFIG_H TRUE)
-set(LIBVNCSERVER_HAVE_LIBJPEG TRUE)
-set(LIBVNCSERVER_HAVE_LZO TRUE)
-set(LIBVNCSERVER_HAVE_LIBPNG TRUE)
-set(LIBVNCSERVER_HAVE_LIBPTHREAD TRUE)
-set(LIBVNCSERVER_HAVE_LIBZ TRUE)
-set(LIBVNCSERVER_HAVE_LIBSSL TRUE)
-set(LIBVNCSERVER_ALLOW24BPP TRUE)
-set(LIBVNCSERVER_IPv6 TRUE)
-### END: libvncserver configuration
+int main()
+{
+	rfbClient* client = rfbGetClient( 8, 3, 4 );
+	client->connectTimeout = 1;
+	client->readTimeout = 1;
+	return 0;
+}
+"
+	LIBVNCCLIENT_SUPPORTS_TIMEOUTS)
+	if(NOT LIBVNCCLIENT_SUPPORTS_TIMEOUTS)
+		message(FATAL_ERROR "Outdated development version of LibVNCClient found")
+	endif()
+	unset(CMAKE_REQUIRED_LIBRARIES)
+else()
+	message(WARNING "Performing internal build of LibVNCClient which requires additional development packages")
+	find_package(ZLIB REQUIRED)
+	find_package(PNG REQUIRED)
+	find_package(JPEG REQUIRED)
+	find_package(LZO REQUIRED)
+	set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+	find_package(Threads REQUIRED)
+endif()
 
+option(WITH_LTO "Build with link-time optimization" ON)
+option(WITH_PCH "Reduce compile time by using precompiled headers" ON)
+option(WITH_SANITIZERS "Build with thread and UB sanitizers" OFF)
+option(WITH_MODEL_TESTERS "Build with model testers (turn on for debugging only)" OFF)
 
-if(SANITIZE)
+if(WITH_SANITIZERS)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread -fsanitize=undefined")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=thread -fsanitize=undefined")
 endif()
@@ -205,7 +212,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-protector-strong -fno-exceptions
 
 if(CMAKE_COMPILER_IS_GNUCC AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 6.0)
 message(WARNING "Not using -fvisibility=hidden and/or LTO with GCC < 6.0")
-set(DISABLE_LTO TRUE)
+set(WITH_LTO OFF)
 else()
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
@@ -213,10 +220,26 @@ set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 endif()
 
 if(VEYON_BUILD_WIN32 OR VEYON_BUILD_WIN64)
-set(DISABLE_LTO TRUE)
+set(WITH_LTO OFF)
 endif()
 
-add_definitions(-DQT_DEPRECATED_WARNINGS -DQT_DISABLE_DEPRECATED_BEFORE=0x051200 -D_FORTIFY_SOURCE=2 -DQT_NO_CAST_FROM_ASCII -DQT_NO_CAST_TO_ASCII -DQT_NO_CAST_FROM_BYTEARRAY)
+if(WITH_MODEL_TESTERS)
+find_package(Qt5Test REQUIRED)
+set(VEYON_DEBUG_LIBRARIES Qt5::Test)
+endif()
+
+add_definitions(
+	-DQT_DEPRECATED_WARNINGS
+	-DQT_DISABLE_DEPRECATED_BEFORE=0x050e00
+	-D_FORTIFY_SOURCE=2
+	-DQT_NO_CAST_FROM_ASCII
+	-DQT_NO_CAST_TO_ASCII
+	-DQT_NO_CAST_FROM_BYTEARRAY
+	-DQT_NO_KEYWORDS
+	-DQT_NO_NARROWING_CONVERSIONS_IN_CONNECT
+	-DQT_USE_QSTRINGBUILDER
+	-DQT_STRICT_ITERATORS
+)
 
 file(GLOB_RECURSE IN_FILES RELATIVE ${CMAKE_SOURCE_DIR} "*config.h.in" "*.rc.in" "*.desktop.in" "*.policy.in" "*.service.in" "*.manifest.in" "*.nsi.in")
 CONFIGURE_FILES(${IN_FILES})
@@ -230,6 +253,7 @@ set(ultravnc_DIR ${3rdparty_DIR}/ultravnc)
 set(libvncserver_DIR ${3rdparty_DIR}/libvncserver)
 set(x11vnc_DIR ${3rdparty_DIR}/x11vnc)
 set(libfakekey_DIR ${3rdparty_DIR}/libfakekey)
+set(qthttpserver_DIR ${3rdparty_DIR}/qthttpserver)
 
 set(CMAKE_SKIP_BUILD_RPATH  FALSE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
@@ -265,11 +289,6 @@ add_subdirectory(worker)
 add_subdirectory(plugins)
 add_subdirectory(translations)
 
-# write libvncserver/libvncclient configuration header
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/${VEYON_CORE_INCLUDE_DIR}/rfb)
-configure_file(${CMAKE_SOURCE_DIR}/3rdparty/libvncserver/rfb/rfbconfig.h.cmakein ${CMAKE_BINARY_DIR}/${VEYON_CORE_INCLUDE_DIR}/rfb/rfbconfig.h @ONLY)
-
-
 #
 # add Windows installer related targets
 #
@@ -298,4 +317,7 @@ message("\n"
 "* Build type                  : ${CMAKE_BUILD_TYPE}\n"
 "* Build platform              : ${CMAKE_SYSTEM_PROCESSOR}\n"
 "* Compile flags               : ${CMAKE_C_FLAGS} (CXX: ${CMAKE_CXX_FLAGS})\n"
+"* Link-time optimization      : ${WITH_LTO}\n"
+"* Use precompiled headers     : ${WITH_PCH}\n"
+"* Build with sanitizers       : ${WITH_SANITIZERS}\n"
 )

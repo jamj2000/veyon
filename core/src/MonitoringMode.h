@@ -24,13 +24,21 @@
 
 #pragma once
 
-#include "SimpleFeatureProvider.h"
+#include "FeatureProviderInterface.h"
 
-class MonitoringMode : public QObject, SimpleFeatureProvider, PluginInterface
+class MonitoringMode : public QObject, FeatureProviderInterface, PluginInterface
 {
 	Q_OBJECT
 	Q_INTERFACES(FeatureProviderInterface PluginInterface)
 public:
+	enum class Argument
+	{
+		UserLoginName,
+		UserFullName,
+		UserSessionId
+	};
+	Q_ENUM(Argument)
+
 	explicit MonitoringMode( QObject* parent = nullptr );
 
 	const Feature& feature() const
@@ -73,10 +81,21 @@ public:
 		return m_features;
 	}
 
-	bool queryLoggedOnUserInfo( const ComputerControlInterfaceList& computerControlInterfaces );
+	void queryLoggedOnUserInfo( const ComputerControlInterfaceList& computerControlInterfaces );
 
-	bool handleFeatureMessage( VeyonMasterInterface& master, const FeatureMessage& message,
-							   ComputerControlInterface::Pointer computerControlInterface ) override;
+	bool controlFeature( Feature::Uid featureUid, Operation operation, const QVariantMap& arguments,
+						const ComputerControlInterfaceList& computerControlInterfaces ) override
+	{
+		Q_UNUSED(featureUid)
+		Q_UNUSED(operation)
+		Q_UNUSED(arguments)
+		Q_UNUSED(computerControlInterfaces)
+
+		return false;
+	}
+
+	bool handleFeatureMessage( ComputerControlInterface::Pointer computerControlInterface,
+							  const FeatureMessage& message ) override;
 
 	bool handleFeatureMessage( VeyonServerInterface& server,
 							   const MessageContext& messageContext,
@@ -90,14 +109,9 @@ private:
 	const Feature m_queryLoggedOnUserInfoFeature;
 	const FeatureList m_features;
 
-	enum Arguments
-	{
-		UserLoginName,
-		UserFullName,
-	};
-
 	QReadWriteLock m_userDataLock;
 	QString m_userLoginName;
 	QString m_userFullName;
+	int m_userSessionId{0};
 
 };

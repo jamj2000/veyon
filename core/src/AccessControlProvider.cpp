@@ -67,7 +67,7 @@ QStringList AccessControlProvider::userGroups() const
 QStringList AccessControlProvider::locations() const
 {
 	auto locationList = objectNames( m_networkObjectDirectory->queryObjects( NetworkObject::Type::Location,
-																			 NetworkObject::Attribute::None, {} ) );
+																			 NetworkObject::Property::None, {} ) );
 
 	std::sort( locationList.begin(), locationList.end() );
 
@@ -89,7 +89,7 @@ QStringList AccessControlProvider::locationsOfComputer( const QString& computer 
 	}
 
 	const auto computers = m_networkObjectDirectory->queryObjects( NetworkObject::Type::Host,
-																   NetworkObject::Attribute::HostAddress, fqdn );
+																   NetworkObject::Property::HostAddress, fqdn );
 	if( computers.isEmpty() )
 	{
 		vWarning() << "Could not query any network objects for host" << fqdn;
@@ -119,7 +119,8 @@ QStringList AccessControlProvider::locationsOfComputer( const QString& computer 
 
 AccessControlProvider::Access AccessControlProvider::checkAccess( const QString& accessingUser,
 																  const QString& accessingComputer,
-																  const QStringList& connectedUsers )
+																  const QStringList& connectedUsers,
+																  Plugin::Uid authMethodUid )
 {
 	if( VeyonCore::config().isAccessRestrictedToUserGroups() )
 	{
@@ -134,7 +135,8 @@ AccessControlProvider::Access AccessControlProvider::checkAccess( const QString&
 												 accessingComputer,
 												 VeyonCore::platform().userFunctions().currentUser(),
 												 HostAddress::localFQDN(),
-												 connectedUsers );
+												 connectedUsers,
+												 authMethodUid );
 		switch( action )
 		{
 		case AccessControlRule::Action::Allow:
@@ -164,8 +166,18 @@ bool AccessControlProvider::processAuthorizedGroups( const QString& accessingUse
 {
 	vDebug() << "processing for user" << accessingUser;
 
-	return m_userGroupsBackend->groupsOfUser( accessingUser, m_queryDomainGroups ).toSet().intersects(
-				VeyonCore::config().authorizedUserGroups().toSet() );
+	const auto groupsOfAccessingUser = m_userGroupsBackend->groupsOfUser( accessingUser, m_queryDomainGroups );
+	const auto authorizedUserGroups = VeyonCore::config().authorizedUserGroups();
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+	const auto groupsOfAccessingUserSet = QSet<QString>{ groupsOfAccessingUser.begin(), groupsOfAccessingUser.end() };
+	const auto authorizedUserGroupSet = QSet<QString>{ authorizedUserGroups.begin(), authorizedUserGroups.end() };
+#else
+	const auto groupsOfAccessingUserSet = groupsOfAccessingUser.toSet();
+	const auto authorizedUserGroupSet = authorizedUserGroups.toSet();
+#endif
+
+	return groupsOfAccessingUserSet.intersects( authorizedUserGroupSet );
 }
 
 
@@ -174,9 +186,10 @@ AccessControlRule::Action AccessControlProvider::processAccessControlRules( cons
 																			const QString& accessingComputer,
 																			const QString& localUser,
 																			const QString& localComputer,
-																			const QStringList& connectedUsers )
+																			const QStringList& connectedUsers,
+																			Plugin::Uid authMethodUid )
 {
-	vDebug() << "processing rules for" << accessingUser << accessingComputer << localUser << localComputer << connectedUsers;
+	vDebug() << "processing rules for" << accessingUser << accessingComputer << localUser << localComputer << connectedUsers << authMethodUid;
 
 	for( const auto& rule : qAsConst( m_accessControlRules ) )
 	{
@@ -188,7 +201,7 @@ AccessControlRule::Action AccessControlProvider::processAccessControlRules( cons
 		}
 
 		if( rule.areConditionsIgnored() ||
-			matchConditions( rule, accessingUser, accessingComputer, localUser, localComputer, connectedUsers ) )
+			matchConditions( rule, accessingUser, accessingComputer, localUser, localComputer, connectedUsers, authMethodUid ) )
 		{
 			vDebug() << "rule" << rule.name() << "matched with action" << rule.action();
 			return rule.action();
@@ -214,7 +227,7 @@ bool AccessControlProvider::isAccessToLocalComputerDenied() const
 	for( const auto& rule : qAsConst( m_accessControlRules ) )
 	{
 		if( matchConditions( rule, {}, {},
-							 VeyonCore::platform().userFunctions().currentUser(), HostAddress::localFQDN(), {} ) )
+							 VeyonCore::platform().userFunctions().currentUser(), HostAddress::localFQDN(), {}, {} ) )
 		{
 			switch( rule.action() )
 			{
@@ -261,7 +274,15 @@ bool AccessControlProvider::haveGroupsInCommon( const QString &userOne, const QS
 	const auto userOneGroups = m_userGroupsBackend->groupsOfUser( userOne, m_queryDomainGroups );
 	const auto userTwoGroups = m_userGroupsBackend->groupsOfUser( userTwo, m_queryDomainGroups );
 
-	return userOneGroups.toSet().intersects( userTwoGroups.toSet() );
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+	const auto userOneGroupSet = QSet<QString>{ userOneGroups.begin(), userOneGroups.end() };
+	const auto userTwoGroupSet = QSet<QString>{ userTwoGroups.begin(), userTwoGroups.end() };
+#else
+	const auto userOneGroupSet = userOneGroups.toSet();
+	const auto userTwoGroupSet = userTwoGroups.toSet();
+#endif
+
+	return userOneGroupSet.intersects( userTwoGroupSet );
 }
 
 
@@ -320,7 +341,7 @@ QString AccessControlProvider::lookupSubject( AccessControlRule::Subject subject
 bool AccessControlProvider::matchConditions( const AccessControlRule &rule,
 											 const QString& accessingUser, const QString& accessingComputer,
 											 const QString& localUser, const QString& localComputer,
-											 const QStringList& connectedUsers ) const
+											 const QStringList& connectedUsers, Plugin::Uid authMethodUid ) const
 {
 	bool hasConditions = false;
 
@@ -330,6 +351,19 @@ bool AccessControlProvider::matchConditions( const AccessControlRule &rule,
 	bool matchResult = rule.areConditionsInverted() == false;
 
 	vDebug() << rule.toJson() << matchResult;
+
+	if( rule.isConditionEnabled( AccessControlRule::Condition::AuthenticationMethod ) )
+	{
+		hasConditions = true;
+
+		const auto allowedAuthMethod = Plugin::Uid( rule.argument( AccessControlRule::Condition::AuthenticationMethod ) );
+		if( authMethodUid.isNull() ||
+			allowedAuthMethod.isNull() ||
+			( authMethodUid == allowedAuthMethod ) != matchResult )
+		{
+			return false;
+		}
+	}
 
 	if( rule.isConditionEnabled( AccessControlRule::Condition::MemberOfUserGroup ) )
 	{

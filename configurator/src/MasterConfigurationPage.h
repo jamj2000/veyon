@@ -37,14 +37,14 @@ class MasterConfigurationPage : public ConfigurationPage
 {
 	Q_OBJECT
 public:
-	MasterConfigurationPage();
+	MasterConfigurationPage( QWidget* parent = nullptr );
 	~MasterConfigurationPage() override;
 
 	void resetWidgets() override;
 	void connectWidgetsToProperties() override;
 	void applyConfiguration() override;
 
-private slots:
+private Q_SLOTS:
 	void enableFeature();
 	void disableFeature();
 

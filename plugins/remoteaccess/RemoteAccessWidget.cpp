@@ -40,13 +40,14 @@
 
 
 // toolbar for remote-control-widget
-RemoteAccessWidgetToolBar::RemoteAccessWidgetToolBar( RemoteAccessWidget* parent, bool viewOnly ) :
+RemoteAccessWidgetToolBar::RemoteAccessWidgetToolBar( RemoteAccessWidget* parent,
+													  bool startViewOnly, bool showViewOnlyToggleButton ) :
 	QWidget( parent ),
 	m_parent( parent ),
 	m_showHideTimeLine( ShowHideAnimationDuration, this ),
 	m_iconStateTimeLine( 0, this ),
 	m_connecting( false ),
-	m_viewOnlyButton( new ToolButton( QPixmap( QStringLiteral(":/remoteaccess/kmag.png") ), tr( "View only" ), tr( "Remote control" ) ) ),
+	m_viewOnlyButton( showViewOnlyToggleButton ? new ToolButton( QPixmap( QStringLiteral(":/remoteaccess/kmag.png") ), tr( "View only" ), tr( "Remote control" ) ) : nullptr ),
 	m_sendShortcutButton( new ToolButton( QPixmap( QStringLiteral(":/remoteaccess/preferences-desktop-keyboard.png") ), tr( "Send shortcut" ) ) ),
 	m_screenshotButton( new ToolButton( QPixmap( QStringLiteral(":/remoteaccess/camera-photo.png") ), tr( "Screenshot" ) ) ),
 	m_fullScreenButton( new ToolButton( QPixmap( QStringLiteral(":/remoteaccess/view-fullscreen.png") ), tr( "Fullscreen" ), tr( "Window" ) ) ),
@@ -61,13 +62,17 @@ RemoteAccessWidgetToolBar::RemoteAccessWidgetToolBar( RemoteAccessWidget* parent
 	show();
 	startConnection();
 
-	m_viewOnlyButton->setCheckable( true );
+	if( m_viewOnlyButton )
+	{
+		m_viewOnlyButton->setCheckable( true );
+		m_viewOnlyButton->setChecked( startViewOnly );
+		connect( m_viewOnlyButton, &ToolButton::toggled, this, &RemoteAccessWidgetToolBar::updateControls );
+		connect( m_viewOnlyButton, &QAbstractButton::toggled, parent, &RemoteAccessWidget::toggleViewOnly );
+	}
+
 	m_fullScreenButton->setCheckable( true );
-	m_viewOnlyButton->setChecked( viewOnly );
 	m_fullScreenButton->setChecked( false );
 
-	connect( m_viewOnlyButton, &ToolButton::toggled, this, &RemoteAccessWidgetToolBar::updateControls );
-	connect( m_viewOnlyButton, &QAbstractButton::toggled, parent, &RemoteAccessWidget::toggleViewOnly );
 	connect( m_fullScreenButton, &QAbstractButton::toggled, parent, &RemoteAccessWidget::toggleFullScreen );
 	connect( m_screenshotButton, &QAbstractButton::clicked, parent, &RemoteAccessWidget::takeScreenshot );
 	connect( m_exitButton, &QAbstractButton::clicked, parent, &QWidget::close );
@@ -89,11 +94,14 @@ RemoteAccessWidgetToolBar::RemoteAccessWidgetToolBar( RemoteAccessWidget* parent
 	m_sendShortcutButton->setObjectName( QStringLiteral("shortcuts") );
 
 	auto layout = new QHBoxLayout( this );
-	layout->setMargin( 1 );
+	layout->setContentsMargins( 1, 1, 1, 1 );
 	layout->setSpacing( 1 );
 	layout->addStretch( 0 );
 	layout->addWidget( m_sendShortcutButton );
-	layout->addWidget( m_viewOnlyButton );
+	if( m_viewOnlyButton )
+	{
+		layout->addWidget( m_viewOnlyButton );
+	}
 	layout->addWidget( m_screenshotButton );
 	layout->addWidget( m_fullScreenButton );
 	layout->addWidget( m_exitButton );
@@ -237,14 +245,16 @@ void RemoteAccessWidgetToolBar::connectionEstablished()
 
 
 
-RemoteAccessWidget::RemoteAccessWidget( const ComputerControlInterface::Pointer& computerControlInterface, bool viewOnly ) :
+RemoteAccessWidget::RemoteAccessWidget( const ComputerControlInterface::Pointer& computerControlInterface,
+										bool startViewOnly, bool showViewOnlyToggleButton ) :
 	QWidget( nullptr ),
 	m_computerControlInterface( computerControlInterface ),
 	m_vncView( new VncViewWidget( computerControlInterface->computer().hostAddress(), -1, this, VncView::RemoteControlMode ) ),
-	m_toolBar( new RemoteAccessWidgetToolBar( this, viewOnly ) )
+	m_toolBar( new RemoteAccessWidgetToolBar( this, startViewOnly, showViewOnlyToggleButton ) )
 {
-	setWindowTitle( tr( "%1 - %2 Remote Access" ).arg( computerControlInterface->computer().name(),
-													   VeyonCore::applicationName() ) );
+	updateRemoteAccessTitle();
+	connect( m_computerControlInterface.data(), &ComputerControlInterface::userChanged, this, &RemoteAccessWidget::updateRemoteAccessTitle );
+
 	setWindowIcon( QPixmap( QStringLiteral(":/remoteaccess/kmag.png") ) );
 	setAttribute( Qt::WA_DeleteOnClose, true );
 
@@ -254,13 +264,13 @@ RemoteAccessWidget::RemoteAccessWidget( const ComputerControlInterface::Pointer&
 	connect( m_vncView, &VncViewWidget::sizeHintChanged, this, &RemoteAccessWidget::updateSize );
 
 	showMaximized();
-	VeyonCore::platform().coreFunctions().raiseWindow( this );
+	VeyonCore::platform().coreFunctions().raiseWindow( this, false );
 
 	showNormal();
 
 	move( 0, 0 );
 
-	toggleViewOnly( viewOnly );
+	toggleViewOnly( startViewOnly );
 }
 
 
@@ -272,7 +282,7 @@ RemoteAccessWidget::~RemoteAccessWidget()
 
 
 
-bool RemoteAccessWidget::eventFilter( QObject* obj, QEvent* event )
+bool RemoteAccessWidget::eventFilter( QObject* object, QEvent* event )
 {
 	if( event->type() == QEvent::KeyRelease &&
 		dynamic_cast<QKeyEvent *>( event )->key() == Qt::Key_Escape &&
@@ -282,7 +292,12 @@ bool RemoteAccessWidget::eventFilter( QObject* obj, QEvent* event )
 		return true;
 	}
 
-	return QWidget::eventFilter( obj, event );
+	if( object == m_vncView && event->type() == QEvent::FocusOut )
+	{
+		m_toolBar->disappear();
+	}
+
+	return QWidget::eventFilter( object, event );
 }
 
 
@@ -299,7 +314,7 @@ void RemoteAccessWidget::enterEvent( QEvent* event )
 void RemoteAccessWidget::leaveEvent( QEvent* event )
 {
 	QTimer::singleShot( AppearDelay, this, [this]() {
-		if( underMouse() == false )
+		if( underMouse() == false && window()->isActiveWindow() )
 		{
 			m_toolBar->appear();
 		}
@@ -357,4 +372,20 @@ void RemoteAccessWidget::toggleViewOnly( bool viewOnly )
 void RemoteAccessWidget::takeScreenshot()
 {
 	Screenshot().take( m_computerControlInterface );
+}
+
+
+
+void RemoteAccessWidget::updateRemoteAccessTitle()
+{
+	if ( m_computerControlInterface->userFullName().isEmpty() )
+	{
+		setWindowTitle( tr( "%1 - %2 Remote Access" ).arg( m_computerControlInterface->computer().name(),
+														   VeyonCore::applicationName() ) );
+	} else
+	{
+		setWindowTitle( tr( "%1 - %2 - %3 Remote Access" ).arg( m_computerControlInterface->userFullName(),
+																  m_computerControlInterface->computer().name(),
+																  VeyonCore::applicationName() ) );
+	}
 }

@@ -25,9 +25,10 @@
 #pragma once
 
 #include "Configuration/Object.h"
-#include "VeyonCore.h"
+#include "ComputerControlInterface.h"
 
 class BuiltinFeatures;
+class ComputerControlInterface;
 class QQuickItem;
 class QQuickWindow;
 class QWidget;
@@ -49,5 +50,9 @@ public:
 
 	virtual Configuration::Object* userConfigurationObject() = 0;
 	virtual void reloadSubFeatures() = 0;
+
+	virtual ComputerControlInterface& localSessionControlInterface() = 0;
+
+	virtual ComputerControlInterfaceList selectedComputerControlInterfaces() const = 0;
 
 };

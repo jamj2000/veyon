@@ -40,7 +40,7 @@ public:
 
 	Plugin::Uid uid() const override
 	{
-		return QStringLiteral("3940fdb4-bcc5-4cba-a227-1a2b22b5971d");
+		return QStringLiteral("73430b14-ef69-4c75-a145-ba635d1cc676");
 	}
 
 	QVersionNumber version() const override
@@ -68,17 +68,17 @@ public:
 		return QStringLiteral( "Tobias Junghans" );
 	}
 
-	QString authenticationTypeName() const override
+	QString authenticationMethodName() const override
 	{
-		return description();
+		return tr("Simple password");
 	}
+
+	QWidget* createAuthenticationConfigurationWidget() override;
 
 	bool initializeCredentials() override;
 	bool hasCredentials() const override;
 
 	bool checkCredentials() const override;
-
-	void configureCredentials() override;
 
 	VncServerClient::AuthState performAuthentication( VncServerClient* client, VariantArrayMessage& message ) const override;
 

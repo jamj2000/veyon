@@ -37,19 +37,30 @@ LockWidget::LockWidget( Mode mode, const QPixmap& background, QWidget* parent ) 
 	m_background( background ),
 	m_mode( mode )
 {
+	if( mode == DesktopVisible )
+	{
+		auto screen = QGuiApplication::primaryScreen();
+		if( windowHandle() )
+		{
+			screen = windowHandle()->screen();
+		}
+
+		if( screen )
+		{
+			m_background = screen->grabWindow( 0 );
+		}
+	}
+
+
 	VeyonCore::platform().coreFunctions().setSystemUiState( false );
 	VeyonCore::platform().inputDeviceFunctions().disableInputDevices();
 
-	if( mode == DesktopVisible )
-	{
-		m_background = windowHandle()->screen()->grabWindow( qApp->desktop()->winId() );
-	}
-
 	setWindowTitle( {} );
-	showFullScreen();
+	show();
 	move( 0, 0 );
 	setFixedSize( qApp->desktop()->size() );
-	VeyonCore::platform().coreFunctions().raiseWindow( this );
+	VeyonCore::platform().coreFunctions().raiseWindow( this, true );
+	showFullScreen();
 	setFocusPolicy( Qt::StrongFocus );
 	setFocus();
 	grabMouse();

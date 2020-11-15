@@ -1,8 +1,8 @@
-include(BuildPlugin)
+include(BuildVeyonPlugin)
 
 add_definitions(-DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0600)
 
-build_plugin(windows-platform
+build_veyon_plugin(windows-platform
 	WindowsPlatformPlugin.cpp
 	WindowsPlatformConfigurationPage.h
 	WindowsPlatformConfigurationPage.cpp
@@ -15,6 +15,7 @@ build_plugin(windows-platform
 	WindowsServiceControl.cpp
 	WindowsServiceCore.cpp
 	WindowsServiceFunctions.cpp
+	WindowsSessionFunctions.cpp
 	WindowsUserFunctions.cpp
 	WtsSessionManager.cpp
 	DesktopInputController.cpp
@@ -33,6 +34,7 @@ build_plugin(windows-platform
 	WindowsServiceControl.h
 	WindowsServiceCore.h
 	WindowsServiceFunctions.h
+	WindowsSessionFunctions.h
 	WindowsUserFunctions.h
 	WtsSessionManager.h
 	DesktopInputController.h
@@ -41,6 +43,8 @@ build_plugin(windows-platform
 	../common/LogonHelper.cpp
 	../common/PersistentLogonCredentials.h
 	../common/PersistentLogonCredentials.cpp
+	../common/PlatformSessionManager.h
+	../common/PlatformSessionManager.cpp
 	../common/ServiceDataManager.h
 	../common/ServiceDataManager.cpp
 	XEventLog.h

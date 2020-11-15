@@ -27,19 +27,33 @@
 #include <QFile>
 #include <QUrl>
 
-#include "Configuration/Object.h"
+#include "ConfigurationPagePluginInterface.h"
 #include "FeatureProviderInterface.h"
+#include "FileTransferConfiguration.h"
 
 class FileTransferController;
 class FileTransferUserConfiguration;
 
-class FileTransferPlugin : public QObject, FeatureProviderInterface, PluginInterface
+class FileTransferPlugin : public QObject, FeatureProviderInterface, PluginInterface, ConfigurationPagePluginInterface
 {
 	Q_OBJECT
 	Q_PLUGIN_METADATA(IID "io.veyon.Veyon.Plugins.FileTransfer")
-	Q_INTERFACES(PluginInterface FeatureProviderInterface)
+	Q_INTERFACES(PluginInterface
+					  FeatureProviderInterface
+						  ConfigurationPagePluginInterface)
 	Q_PROPERTY(QString lastFileTransferSourceDirectory READ lastFileTransferSourceDirectory)
 public:
+	enum class Argument
+	{
+		TransferId,
+		Filename,
+		DataChunk,
+		OpenFileInApplication,
+		OverwriteExistingFile,
+		Files
+	};
+	Q_ENUM(Argument)
+
 	explicit FileTransferPlugin( QObject* parent = nullptr );
 	~FileTransferPlugin() override;
 
@@ -78,14 +92,11 @@ public:
 		return m_features;
 	}
 
+	bool controlFeature( Feature::Uid featureUid, Operation operation, const QVariantMap& arguments,
+						const ComputerControlInterfaceList& computerControlInterfaces ) override;
+
 	bool startFeature( VeyonMasterInterface& master, const Feature& feature,
 					   const ComputerControlInterfaceList& computerControlInterfaces ) override;
-
-	bool stopFeature( VeyonMasterInterface& master, const Feature& feature,
-					  const ComputerControlInterfaceList& computerControlInterfaces ) override;
-
-	bool handleFeatureMessage( VeyonMasterInterface& master, const FeatureMessage& message,
-							   ComputerControlInterface::Pointer computerControlInterface ) override;
 
 	bool handleFeatureMessage( VeyonServerInterface& server,
 							   const MessageContext& messageContext,
@@ -101,7 +112,9 @@ public:
 							bool openFileInApplication, const ComputerControlInterfaceList& interfaces );
 	void sendOpenTransferFolderMessage( const ComputerControlInterfaceList& interfaces );
 
-signals:
+	ConfigurationPage* createConfigurationPage() override;
+
+Q_SIGNALS:
 	Q_INVOKABLE void acceptSelectedFiles( const QList<QUrl>& fileUrls );
 
 private:
@@ -110,8 +123,7 @@ private:
 		return m_lastFileTransferSourceDirectory;
 	}
 
-	void startFileTransfer( const QStringList& files, Configuration::Object* config,
-							const ComputerControlInterfaceList& interfaces );
+	QString destinationDirectory() const;
 
 	enum Commands
 	{
@@ -123,24 +135,17 @@ private:
 		CommandCount
 	};
 
-	enum Arguments
-	{
-		TransferId,
-		Filename,
-		DataChunk,
-		OpenFileInApplication,
-		OverwriteExistingFile,
-		ArgumentsCount
-	};
-
 	const Feature m_fileTransferFeature;
 	const FeatureList m_features;
+
+	FileTransferConfiguration m_configuration;
 
 	QString m_lastFileTransferSourceDirectory;
 
 	FileTransferController* m_fileTransferController{nullptr};
 
 	QFile m_currentFile{};
+	QString m_currentFileName;
 	QUuid m_currentTransferId{};
 
 };

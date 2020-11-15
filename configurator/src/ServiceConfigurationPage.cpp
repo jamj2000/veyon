@@ -36,13 +36,15 @@
 #include "ui_ServiceConfigurationPage.h"
 
 
-ServiceConfigurationPage::ServiceConfigurationPage() :
+ServiceConfigurationPage::ServiceConfigurationPage( QWidget* parent ) :
+	ConfigurationPage( parent ),
 	ui(new Ui::ServiceConfigurationPage),
 	m_vncServerPluginConfigurationWidget( nullptr )
 {
 	ui->setupUi(this);
 
-	Configuration::UiMapping::setFlags( ui->networkGroupBox, Configuration::Property::Flag::Advanced );
+	Configuration::UiMapping::setFlags( ui->networkPortNumbersGroupBox, Configuration::Property::Flag::Advanced );
+	Configuration::UiMapping::setFlags( ui->miscNetworkSettingsGroupBox, Configuration::Property::Flag::Advanced );
 
 	updateServiceControl();
 	populateVncServerPluginComboBox();
@@ -145,7 +147,7 @@ void ServiceConfigurationPage::updateVncServerPluginConfigurationWidget()
 		}
 	}
 
-	emit widgetsChanged();
+	Q_EMIT widgetsChanged();
 }
 
 

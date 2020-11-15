@@ -186,7 +186,7 @@ static QWindow* windowForWidget( const QWidget* widget )
 
 
 
-void WindowsCoreFunctions::raiseWindow( QWidget* widget )
+void WindowsCoreFunctions::raiseWindow( QWidget* widget, bool stayOnTop )
 {
 	widget->activateWindow();
 	widget->raise();
@@ -197,7 +197,7 @@ void WindowsCoreFunctions::raiseWindow( QWidget* widget )
 		QPlatformNativeInterface* interfacep = QGuiApplication::platformNativeInterface();
 		auto windowHandle = static_cast<HWND>( interfacep->nativeResourceForWindow( QByteArrayLiteral( "handle" ), window ) );
 
-		SetWindowPos( windowHandle, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
+		SetWindowPos( windowHandle, stayOnTop ? HWND_TOPMOST : HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
 	}
 }
 
@@ -335,7 +335,7 @@ bool WindowsCoreFunctions::runProgramAsUser( const QString& program,
 		return false;
 	}
 
-	auto processHandle = runProgramInSession( program, parameters, sessionIdEnvironment(), baseProcessId, desktop );
+	auto processHandle = runProgramInSession( program, parameters, {}, baseProcessId, desktop );
 	if( processHandle )
 	{
 		CloseHandle( processHandle );
@@ -516,24 +516,6 @@ HANDLE WindowsCoreFunctions::runProgramInSession( const QString& program,
 	}
 
 	return nullptr;
-}
-
-
-
-QStringList WindowsCoreFunctions::sessionIdEnvironment()
-{
-	if( VeyonCore::config().multiSessionModeEnabled() )
-	{
-		auto currentSession = WtsSessionManager::currentSession();
-		if( currentSession != WtsSessionManager::activeConsoleSession() )
-		{
-			return { QStringLiteral("%1=%2").
-						arg( VeyonCore::sessionIdEnvironmentVariable() ).
-						arg( currentSession % 100 ) };
-		}
-	}
-
-	return {};
 }
 
 

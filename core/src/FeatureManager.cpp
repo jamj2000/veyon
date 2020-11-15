@@ -111,6 +111,19 @@ Plugin::Uid FeatureManager::pluginUid( const Feature& feature ) const
 
 
 
+void FeatureManager::controlFeature( Feature::Uid featureUid,
+									FeatureProviderInterface::Operation operation,
+									const QVariantMap& arguments,
+									const ComputerControlInterfaceList& computerControlInterfaces )
+{
+	for( auto featureInterface : qAsConst( m_featurePluginInterfaces ) )
+	{
+		featureInterface->controlFeature( featureUid, operation, arguments, computerControlInterfaces );
+	}
+}
+
+
+
 void FeatureManager::startFeature( VeyonMasterInterface& master,
 								   const Feature& feature,
 								   const ComputerControlInterfaceList& computerControlInterfaces )
@@ -155,8 +168,8 @@ void FeatureManager::stopFeature( VeyonMasterInterface& master,
 
 
 
-bool FeatureManager::handleFeatureMessage( VeyonMasterInterface& master, const FeatureMessage& message,
-										   const ComputerControlInterface::Pointer& computerControlInterface )
+bool FeatureManager::handleFeatureMessage( ComputerControlInterface::Pointer computerControlInterface,
+										  const FeatureMessage& message )
 {
 	vDebug() << "feature" << message.featureUid()
 			 << "command" << message.command()
@@ -166,7 +179,7 @@ bool FeatureManager::handleFeatureMessage( VeyonMasterInterface& master, const F
 
 	for( const auto& featureInterface : qAsConst( m_featurePluginInterfaces ) )
 	{
-		if( featureInterface->handleFeatureMessage( master, message, computerControlInterface ) )
+		if( featureInterface->handleFeatureMessage( computerControlInterface, message ) )
 		{
 			handled = true;
 		}

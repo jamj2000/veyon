@@ -38,7 +38,7 @@
 DesktopAccessDialog::DesktopAccessDialog( QObject* parent ) :
 	QObject( parent ),
 	m_desktopAccessDialogFeature( Feature( QLatin1String( staticMetaObject.className() ),
-										   Feature::Dialog | Feature::Service | Feature::Worker | Feature::Builtin,
+										   Feature::Service | Feature::Worker | Feature::Builtin,
 										   Feature::Uid( "3dd8ec3e-7004-4936-8f2a-70699b9819be" ),
 										   Feature::Uid(),
 										   tr( "Desktop access dialog" ), {}, {} ) ),
@@ -53,20 +53,19 @@ DesktopAccessDialog::DesktopAccessDialog( QObject* parent ) :
 
 bool DesktopAccessDialog::isBusy( FeatureWorkerManager* featureWorkerManager ) const
 {
-	return featureWorkerManager->isWorkerRunning( m_desktopAccessDialogFeature );
+	return featureWorkerManager->isWorkerRunning( m_desktopAccessDialogFeature.uid() );
 }
 
 
 
 void DesktopAccessDialog::exec( FeatureWorkerManager* featureWorkerManager, const QString& user, const QString& host )
 {
-	featureWorkerManager->startWorker( m_desktopAccessDialogFeature, FeatureWorkerManager::ManagedSystemProcess );
-
 	m_choice = ChoiceNone;
 
-	featureWorkerManager->sendMessage( FeatureMessage( m_desktopAccessDialogFeature.uid(), RequestDesktopAccess ).
-									   addArgument( UserArgument, user ).
-									   addArgument( HostArgument, host ) );
+	featureWorkerManager->sendMessageToManagedSystemWorker(
+		FeatureMessage( m_desktopAccessDialogFeature.uid(), RequestDesktopAccess )
+			.addArgument( Argument::User, user )
+			.addArgument( Argument::Host, host ) );
 
 	connect( &m_abortTimer, &QTimer::timeout, this, [=]() { abort( featureWorkerManager ); } );
 	m_abortTimer.start( DialogTimeout );
@@ -76,11 +75,11 @@ void DesktopAccessDialog::exec( FeatureWorkerManager* featureWorkerManager, cons
 
 void DesktopAccessDialog::abort( FeatureWorkerManager* featureWorkerManager )
 {
-	featureWorkerManager->stopWorker( m_desktopAccessDialogFeature );
+	featureWorkerManager->stopWorker( m_desktopAccessDialogFeature.uid() );
 
 	m_choice = ChoiceNone;
 
-	emit finished();
+	Q_EMIT finished();
 }
 
 
@@ -94,13 +93,13 @@ bool DesktopAccessDialog::handleFeatureMessage( VeyonServerInterface& server,
 	if( m_desktopAccessDialogFeature.uid() == message.featureUid() &&
 		message.command() == ReportDesktopAccessChoice )
 	{
-		m_choice = message.argument( ChoiceArgument ).value<Choice>();
+		m_choice = message.argument( Argument::Choice ).value<Choice>();
 
-		server.featureWorkerManager().stopWorker( m_desktopAccessDialogFeature );
+		server.featureWorkerManager().stopWorker( m_desktopAccessDialogFeature.uid() );
 
 		m_abortTimer.stop();
 
-		emit finished();
+		Q_EMIT finished();
 
 		return true;
 	}
@@ -118,11 +117,11 @@ bool DesktopAccessDialog::handleFeatureMessage( VeyonWorkerInterface& worker, co
 		return false;
 	}
 
-	const auto result = requestDesktopAccess( message.argument( UserArgument ).toString(),
-											  message.argument( HostArgument ).toString() );
+	const auto result = requestDesktopAccess( message.argument( Argument::User ).toString(),
+											  message.argument( Argument::Host ).toString() );
 
 	FeatureMessage reply( m_desktopAccessDialogFeature.uid(), ReportDesktopAccessChoice );
-	reply.addArgument( ChoiceArgument, result );
+	reply.addArgument( Argument::Choice, result );
 
 	return worker.sendFeatureMessageReply( reply );
 }
@@ -150,7 +149,7 @@ DesktopAccessDialog::Choice DesktopAccessDialog::requestDesktopAccess( const QSt
 	m.setEscapeButton( m.button( QMessageBox::No ) );
 	m.setDefaultButton( neverBtn );
 
-	VeyonCore::platform().coreFunctions().raiseWindow( &m );
+	VeyonCore::platform().coreFunctions().raiseWindow( &m, true );
 
 	const auto result = m.exec();
 

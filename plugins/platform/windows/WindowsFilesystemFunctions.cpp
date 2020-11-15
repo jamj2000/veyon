@@ -32,7 +32,7 @@
 #include "WindowsFilesystemFunctions.h"
 
 
-static QString windowsConfigPath( REFKNOWNFOLDERID folderId )
+static QString windowsConfigPath( const KNOWNFOLDERID folderId )
 {
 	QString result;
 
@@ -232,4 +232,25 @@ bool WindowsFilesystemFunctions::setFileOwnerGroupPermissions( const QString& fi
 	LocalFree( acl );
 
 	return result == ERROR_SUCCESS;
+}
+
+
+
+bool WindowsFilesystemFunctions::openFileSafely( QFile* file, QIODevice::OpenMode openMode, QFileDevice::Permissions permissions )
+{
+	if( file == nullptr )
+	{
+		return false;
+	}
+
+	if( file->open( openMode ) &&
+		file->symLinkTarget().isEmpty() &&
+		file->setPermissions( permissions ) )
+	{
+		return true;
+	}
+
+	file->close();
+
+	return false;
 }

@@ -37,6 +37,7 @@
 #include "WtsSessionManager.h"
 
 
+// clazy:excludeall=rule-of-three
 class VeyonServerProcess
 {
 public:
@@ -50,26 +51,19 @@ public:
 		stop();
 	}
 
-	void start( DWORD wtsSessionId, bool multiSession, const ServiceDataManager::Token& token )
+	void start( DWORD wtsSessionId, const ServiceDataManager::Token& token )
 	{
 		stop();
 
 		const auto baseProcessId = WtsSessionManager::findWinlogonProcessId( wtsSessionId );
 		const auto user = WtsSessionManager::querySessionInformation( wtsSessionId, WtsSessionManager::SessionInfo::UserName );
 
-		QStringList extraEnv{
+		const QStringList extraEnv{
 			QStringLiteral("%1=%2").arg( QLatin1String( ServiceDataManager::serviceDataTokenEnvironmentVariable() ),
 										 QString::fromUtf8( token.toByteArray() ) )
 		};
 
-		if( multiSession )
-		{
-			extraEnv.append( QStringLiteral("%1=%2").
-							 arg( VeyonCore::sessionIdEnvironmentVariable() ).
-							 arg( wtsSessionId % 100 ) );
-		}
-
-		vInfo() << "Starting server for session" << wtsSessionId << "with user" << user;
+		vInfo() << "Starting server for WTS session" << wtsSessionId << "with user" << user;
 		m_subProcessHandle = WindowsCoreFunctions::runProgramInSession( VeyonCore::filesystem().serverFilePath(), {},
 																		extraEnv,
 																		baseProcessId, {} );
@@ -110,7 +104,7 @@ public:
 
 private:
 	static constexpr auto ServerQueryTime = 100;
-	static constexpr auto ServerWaitTime = 10000;
+	static constexpr auto ServerWaitTime = 5000;
 	static constexpr auto ServerPostStopWaitTime = 1000;
 
 	HANDLE m_subProcessHandle;
@@ -128,6 +122,9 @@ WindowsServiceCore::WindowsServiceCore( const QString& name,
 	m_serviceEntryPoint( serviceEntryPoint )
 {
 	s_instance = this;
+
+	// allocate session 0 (PlatformSessionFunctions::DefaultSessionId) so we can always assign it to the console session
+	m_sessionManager.openSession( QStringLiteral("0 (console)") );
 
 	// enable privileges required to create process with access token from other process
 	WindowsCoreFunctions::enablePrivilege( SE_ASSIGNPRIMARYTOKEN_NAME, true );
@@ -152,6 +149,8 @@ bool WindowsServiceCore::runAsService()
 		{ nullptr, nullptr }
 	} ;
 
+	WindowsInputDeviceFunctions::checkInterceptionInstallation();
+
 	if( !StartServiceCtrlDispatcher( dispatchTable ) )
 	{
 		vCritical() << "StartServiceCtrlDispatcher failed.";
@@ -165,12 +164,10 @@ bool WindowsServiceCore::runAsService()
 
 void WindowsServiceCore::manageServerInstances()
 {
-	WindowsInputDeviceFunctions::checkInterceptionInstallation();
-
 	m_serverShutdownEvent = CreateEvent( nullptr, false, false, L"Global\\SessionEventUltra" );
 	ResetEvent( m_serverShutdownEvent );
 
-	if( multiSession() )
+	if( m_sessionManager.multiSession() )
 	{
 		manageServersForAllSessions();
 	}
@@ -199,11 +196,15 @@ void WindowsServiceCore::manageServersForAllSessions()
 			wtsSessionIds.append( consoleSessionId );
 		}
 
-		for( auto it = serverProcesses.begin(), end = serverProcesses.end(); it != end; )
+		for( auto it = serverProcesses.begin(); it != serverProcesses.end(); )
 		{
 			if( wtsSessionIds.contains( it.key() ) == false )
 			{
 				delete it.value();
+				if( it.key() != consoleSessionId )
+				{
+					m_sessionManager.closeSession( QString::number(it.key() ) );
+				}
 				it = serverProcesses.erase( it );
 			}
 			else
@@ -216,9 +217,13 @@ void WindowsServiceCore::manageServersForAllSessions()
 		{
 			if( serverProcesses.contains( wtsSessionId ) == false )
 			{
+				if( wtsSessionId != consoleSessionId )
+				{
+					m_sessionManager.openSession( QString::number(wtsSessionId) );
+				}
+
 				auto serverProcess = new VeyonServerProcess;
-				serverProcess->start( wtsSessionId, multiSession() && wtsSessionId != consoleSessionId,
-									  m_dataManager.token() );
+				serverProcess->start( wtsSessionId, m_dataManager.token() );
 
 				serverProcesses[wtsSessionId] = serverProcess;
 			}
@@ -265,7 +270,7 @@ void WindowsServiceCore::manageServerForActiveConsoleSession()
 
 			if( wtsSessionId != WtsSessionManager::InvalidSession || sessionChanged )
 			{
-				veyonServerProcess.start( wtsSessionId, multiSession(), m_dataManager.token() );
+				veyonServerProcess.start( wtsSessionId, m_dataManager.token() );
 				lastServerStart.restart();
 			}
 
@@ -273,7 +278,7 @@ void WindowsServiceCore::manageServerForActiveConsoleSession()
 		}
 		else if( veyonServerProcess.isRunning() == false )
 		{
-			veyonServerProcess.start( wtsSessionId, multiSession(), m_dataManager.token() );
+			veyonServerProcess.start( wtsSessionId, m_dataManager.token() );
 			oldWtsSessionId = wtsSessionId;
 			lastServerStart.restart();
 		}
@@ -352,14 +357,44 @@ void WindowsServiceCore::serviceMain()
 
 DWORD WindowsServiceCore::serviceCtrl( DWORD ctrlCode, DWORD eventType, LPVOID eventData, LPVOID context )
 {
-	vDebug() << ctrlCode << eventType << eventData << context;
+	static const QMap<DWORD, const char *> controlMessages{
+		{ SERVICE_CONTROL_SHUTDOWN, "SHUTDOWN" },
+		{ SERVICE_CONTROL_STOP, "STOP" },
+		{ SERVICE_CONTROL_PAUSE, "PAUSE" },
+		{ SERVICE_CONTROL_CONTINUE, "CONTINUE" },
+		{ SERVICE_CONTROL_INTERROGATE, "INTERROGATE" },
+		{ SERVICE_CONTROL_PARAMCHANGE, "PARAM CHANGE" },
+		{ SERVICE_CONTROL_DEVICEEVENT, "DEVICE EVENT" },
+		{ SERVICE_CONTROL_HARDWAREPROFILECHANGE, "HARDWARE PROFILE CHANGE" },
+		{ SERVICE_CONTROL_POWEREVENT, "POWER EVENT" },
+		{ SERVICE_CONTROL_SESSIONCHANGE, "SESSION CHANGE" }
+	};
+
+	static const QMap<DWORD, const char *> sessionChangeEventTypes{
+		{ WTS_CONSOLE_CONNECT, "CONSOLE CONNECT" },
+		{ WTS_CONSOLE_DISCONNECT, "CONSOLE DISCONNECT" },
+		{ WTS_REMOTE_CONNECT, "REMOTE CONNECT" },
+		{ WTS_REMOTE_DISCONNECT, "REMOTE DISCONNECT" },
+		{ WTS_SESSION_LOGON, "LOGON" },
+		{ WTS_SESSION_LOGOFF, "LOGOFF" },
+		{ WTS_SESSION_LOCK, "LOCK" },
+		{ WTS_SESSION_UNLOCK, "UNLOCK" },
+		{ WTS_SESSION_REMOTE_CONTROL, "REMOTE CONTROL" },
+		{ WTS_SESSION_CREATE, "CREATE" },
+		{ WTS_SESSION_TERMINATE, "TERMINATE" }
+	};
+
+	if( ctrlCode != SERVICE_CONTROL_SESSIONCHANGE &&
+		controlMessages.contains( ctrlCode ) )
+	{
+		vDebug() << "control code:" << controlMessages[ctrlCode] << "event type:" << eventType;
+	}
 
 	// What control code have we been sent?
 	switch( ctrlCode )
 	{
 	case SERVICE_CONTROL_SHUTDOWN:
 	case SERVICE_CONTROL_STOP:
-		// STOP : The service must stop
 		m_status.dwCurrentState = SERVICE_STOP_PENDING;
 		SetEvent( m_stopServiceEvent );
 		break;
@@ -369,14 +404,18 @@ DWORD WindowsServiceCore::serviceCtrl( DWORD ctrlCode, DWORD eventType, LPVOID e
 		break;
 
 	case SERVICE_CONTROL_SESSIONCHANGE:
+		if( sessionChangeEventTypes.contains( eventType ) )
+		{
+			const auto notification = reinterpret_cast<WTSSESSION_NOTIFICATION *>( eventData );
+			vDebug() << "session change event:" << sessionChangeEventTypes[eventType]
+					 << "for session" << ( notification ? notification->dwSessionId : -1 );
+		}
 		switch( eventType )
 		{
-		case WTS_SESSION_LOGOFF:
-			vInfo() << "Session change event: WTS_SESSION_LOGOFF";
-			m_sessionChangeEvent = 1;
-			break;
 		case WTS_SESSION_LOGON:
-			vInfo() << "Session change event: WTS_SESSION_LOGON";
+		case WTS_SESSION_LOGOFF:
+		case WTS_REMOTE_CONNECT:
+		case WTS_REMOTE_DISCONNECT:
 			m_sessionChangeEvent = 1;
 			break;
 		}
@@ -427,8 +466,6 @@ bool WindowsServiceCore::reportStatus( DWORD state, DWORD exitCode, DWORD waitHi
 	{
 		m_status.dwCheckPoint = checkpoint++;
 	}
-
-	vDebug() << state << exitCode << waitHint << checkpoint;
 
 	// Tell the SCM our new status
 	if( !( result = SetServiceStatus( m_statusHandle, &m_status ) ) )

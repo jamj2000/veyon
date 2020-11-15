@@ -26,15 +26,17 @@
 
 #include <QtGlobal>
 
-#if QT_VERSION < 0x050600
+#if QT_VERSION < QT_VERSION_CHECK(5, 6, 0)
 #error Qt < 5.6 not supported
 #endif
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 13, 0)
 #define Q_DISABLE_MOVE(Class) \
 	Class(const Class &&) Q_DECL_EQ_DELETE;\
 	Class &operator=(const Class &&) Q_DECL_EQ_DELETE;
+#endif
 
-#if QT_VERSION < 0x050700
+#if QT_VERSION < QT_VERSION_CHECK(5, 7, 0)
 template <typename T> struct QAddConst { using Type = const T; };
 template <typename T> constexpr typename QAddConst<T>::Type &qAsConst(T &t) { return t; }
 template <typename T> void qAsConst(const T &&) = delete;
@@ -81,7 +83,7 @@ struct QOverload : QConstOverload<Args...>, QNonConstOverload<Args...>
 };
 #endif
 
-#if QT_VERSION < 0x051200
+#if QT_VERSION < QT_VERSION_CHECK(5, 12, 0)
 #define QDeadlineTimer(x) static_cast<unsigned long int>(x)
 #else
 #include <QDeadlineTimer>

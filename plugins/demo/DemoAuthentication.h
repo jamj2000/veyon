@@ -36,19 +36,20 @@ public:
 	explicit DemoAuthentication( Plugin::Uid pluginUid );
 	~DemoAuthentication() override = default;
 
-	QString authenticationTypeName() const override
+	QString authenticationMethodName() const override
 	{
 		return {};
+	}
+
+	QWidget* createAuthenticationConfigurationWidget() override
+	{
+		return nullptr;
 	}
 
 	bool initializeCredentials() override;
 	bool hasCredentials() const override;
 
 	bool checkCredentials() const override;
-
-	void configureCredentials() override
-	{
-	}
 
 	VncServerClient::AuthState performAuthentication( VncServerClient* client, VariantArrayMessage& message ) const override;
 
@@ -76,6 +77,6 @@ public:
 
 private:
 	AccessToken m_accessToken{};
-	Plugin::Uid m_pluginUid;
+	const Plugin::Uid m_pluginUid;
 
 };

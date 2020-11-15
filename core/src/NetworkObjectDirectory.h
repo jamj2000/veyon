@@ -56,7 +56,7 @@ public:
 	NetworkObject::ModelId rootId() const;
 
 	virtual NetworkObjectList queryObjects( NetworkObject::Type type,
-											NetworkObject::Attribute attribute, const QVariant& value );
+											NetworkObject::Property property, const QVariant& value );
 	virtual NetworkObjectList queryParents( const NetworkObject& child );
 
 	virtual void update() = 0;
@@ -68,6 +68,7 @@ protected:
 	bool hasObjects() const;
 	void addOrUpdateObject( const NetworkObject& networkObject, const NetworkObject& parent );
 	void removeObjects( const NetworkObject& parent, const NetworkObjectFilter& removeObjectFilter );
+	void replaceObjects( const NetworkObjectList& objects, const NetworkObject& parent );
 	void setObjectPopulated( const NetworkObject& networkObject );
 
 private:
@@ -77,7 +78,7 @@ private:
 	NetworkObject m_rootObject{NetworkObject::Type::Root};
 	NetworkObjectList m_defaultObjectList{};
 
-signals:
+Q_SIGNALS:
 	void objectsAboutToBeInserted( const NetworkObject& parent, int index, int count );
 	void objectsInserted();
 	void objectsAboutToBeRemoved( const NetworkObject& parent, int index, int count );

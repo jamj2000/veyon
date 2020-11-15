@@ -25,7 +25,6 @@
 #pragma once
 
 #include "AuthenticationPluginInterface.h"
-#include "DummyAuthentication.h"
 
 class VEYON_CORE_EXPORT AuthenticationManager : public QObject
 {
@@ -41,18 +40,25 @@ public:
 		return m_plugins;
 	}
 
-	Types availableTypes() const;
+	Plugin::Uid toUid( AuthenticationPluginInterface* authPlugin ) const;
 
-	AuthenticationPluginInterface* configuredPlugin() const
+	Types availableMethods() const;
+
+	void setEnabled( Plugin::Uid uid, bool enabled );
+	bool isEnabled( Plugin::Uid uid ) const;
+
+	void setEnabled( AuthenticationPluginInterface* authPlugin, bool enabled );
+	bool isEnabled( AuthenticationPluginInterface* authPlugin ) const;
+
+	bool initializeCredentials();
+
+	AuthenticationPluginInterface* initializedPlugin() const
 	{
-		return m_configuredPlugin;
+		return m_initializedPlugin;
 	}
-
-	void reloadConfiguration();
 
 private:
 	Plugins m_plugins{};
-	AuthenticationPluginInterface* m_configuredPlugin{nullptr};
-	DummyAuthentication m_dummyAuthentication{};
+	AuthenticationPluginInterface* m_initializedPlugin{nullptr};
 
 };

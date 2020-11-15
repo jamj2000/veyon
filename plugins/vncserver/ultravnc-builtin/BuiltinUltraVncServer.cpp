@@ -34,7 +34,6 @@ extern int WinVNCAppMain();
 
 static BuiltinUltraVncServer* vncServerInstance = nullptr;
 
-extern BOOL multi;
 extern HINSTANCE hAppInstance;
 extern DWORD mainthreadId;
 extern HINSTANCE hInstResDLL;
@@ -176,14 +175,14 @@ BuiltinUltraVncServer::~BuiltinUltraVncServer()
 
 
 QWidget* BuiltinUltraVncServer::configurationWidget()
- {
+{
 	return new UltraVncConfigurationWidget( m_configuration );
- }
+}
 
 
 
 void BuiltinUltraVncServer::prepareServer()
- {
+{
 	// initialize global instance handler and main thread ID
 	hAppInstance = GetModuleHandle( nullptr );
 	mainthreadId = GetCurrentThreadId();
@@ -191,21 +190,14 @@ void BuiltinUltraVncServer::prepareServer()
 	hInstResDLL = hAppInstance;
 
 	m_logoffEventFilter = new LogoffEventFilter;
- }
+}
 
 
 
-void BuiltinUltraVncServer::runServer( int serverPort, const Password& password )
- {
+bool BuiltinUltraVncServer::runServer( int serverPort, const Password& password )
+{
 	m_serverPort = serverPort;
 	m_password = password;
-
-	// only allow multiple instances when explicitely working with multiple
-	// service instances
-	if( VeyonCore::hasSessionId() )
-	{
-		multi = true;
-	 }
 
 	// run UltraVNC server
 	auto hUser32 = LoadLibrary( "user32.dll" );
@@ -240,7 +232,7 @@ void BuiltinUltraVncServer::runServer( int serverPort, const Password& password 
 		FreeLibrary( hSHCore );
 	}
 
-	WinVNCAppMain();
+	return WinVNCAppMain() == 1;
 }
 
 

@@ -52,6 +52,8 @@ template<>           struct CheapestType<QUuid>   { using Type = QUuid; };
 template<typename T> struct CheapestType<T *>     { using Type = T *; };
 
 
+// clazy:excludeall=ctor-missing-parent-argument
+
 class VEYON_CORE_EXPORT Property : public QObject
 {
 	Q_OBJECT
@@ -66,7 +68,7 @@ public:
 	Q_DECLARE_FLAGS(Flags, Flag)
 
 	// work around QTBUG-47652 where Q_FLAG() is broken for enum classes when using Qt < 5.12
-#if QT_VERSION >= 0x051200
+#if QT_VERSION >= QT_VERSION_CHECK(5, 12, 0)
 	Q_FLAG(Flags)
 #endif
 

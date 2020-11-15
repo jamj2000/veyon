@@ -24,16 +24,24 @@
 
 #pragma once
 
-#include "SimpleFeatureProvider.h"
+#include "FeatureProviderInterface.h"
 
 class QSystemTrayIcon;
 class FeatureWorkerManager;
 
-class VEYON_CORE_EXPORT SystemTrayIcon : public QObject, public SimpleFeatureProvider, public PluginInterface
+class VEYON_CORE_EXPORT SystemTrayIcon : public QObject, public FeatureProviderInterface, public PluginInterface
 {
 	Q_OBJECT
 	Q_INTERFACES(FeatureProviderInterface PluginInterface)
 public:
+	enum class Argument
+	{
+		ToolTipText,
+		MessageTitle,
+		MessageText
+	};
+	Q_ENUM(Argument)
+
 	explicit SystemTrayIcon( QObject* parent = nullptr );
 	~SystemTrayIcon() override = default;
 
@@ -79,6 +87,17 @@ public:
 		return m_features;
 	}
 
+	bool controlFeature( Feature::Uid featureUid, Operation operation, const QVariantMap& arguments,
+						const ComputerControlInterfaceList& computerControlInterfaces ) override
+	{
+		Q_UNUSED(featureUid)
+		Q_UNUSED(operation)
+		Q_UNUSED(arguments)
+		Q_UNUSED(computerControlInterfaces)
+
+		return false;
+	}
+
 	bool handleFeatureMessage( VeyonServerInterface& server,
 							   const MessageContext& messageContext,
 							   const FeatureMessage& message ) override;
@@ -90,13 +109,6 @@ private:
 	{
 		SetToolTipCommand,
 		ShowMessageCommand
-	};
-
-	enum Arguments
-	{
-		ToolTipTextArgument,
-		MessageTitleArgument,
-		MessageTextArgument
 	};
 
 	const Feature m_systemTrayIconFeature;

@@ -36,14 +36,14 @@ class AccessControlPage : public ConfigurationPage
 {
 	Q_OBJECT
 public:
-	AccessControlPage();
+	AccessControlPage( QWidget* parent = nullptr );
 	~AccessControlPage() override;
 
 	void resetWidgets() override;
 	void connectWidgetsToProperties() override;
 	void applyConfiguration() override;
 
-private slots:
+private Q_SLOTS:
 	void addAccessGroup();
 	void removeAccessGroup();
 	void updateAccessGroupsLists();

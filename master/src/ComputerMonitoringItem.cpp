@@ -56,20 +56,14 @@ ComputerControlInterfaceList ComputerMonitoringItem::selectedComputerControlInte
 
 void ComputerMonitoringItem::componentComplete()
 {
-	initializeView();
+	initializeView( this );
 
-	if( VeyonCore::config().autoAdjustGridSize() )
+	if( VeyonCore::config().autoAdjustMonitoringIconSize() )
 	{
-		autoAdjustComputerScreenSize();
+		initiateIconSizeAutoAdjust();
 	}
 
 	QQuickItem::componentComplete();
-}
-
-
-
-void ComputerMonitoringItem::autoAdjustComputerScreenSize()
-{
 }
 
 
@@ -95,7 +89,7 @@ void ComputerMonitoringItem::runFeature( QString uid )
 
 QObject* ComputerMonitoringItem::model() const
 {
-	return listModel();
+	return dataModel();
 }
 
 
@@ -126,8 +120,8 @@ void ComputerMonitoringItem::setColors( const QColor& backgroundColor, const QCo
 	m_backgroundColor = backgroundColor;
 	m_textColor = textColor;
 
-	emit backgroundColorChanged();
-	emit textColorChanged();
+	Q_EMIT backgroundColorChanged();
+	Q_EMIT textColorChanged();
 }
 
 
@@ -158,7 +152,7 @@ void ComputerMonitoringItem::setIconSize( const QSize& size )
 	{
 		m_iconSize = size;
 
-		emit iconSizeChanged();
+		Q_EMIT iconSizeChanged();
 	}
 }
 

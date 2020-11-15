@@ -43,8 +43,9 @@ public:
 		Mode = 0x0001,
 		Action = 0x0002,
 		Session = 0x0004,
-		Operation = 0x0008,
-		Dialog = 0x0010,
+		Internal = 0x0008,
+		Option = 0x0010,
+		Checked = 0x0020,
 		Master = 0x0100,
 		Service = 0x0200,
 		Worker = 0x0400,
@@ -214,5 +215,5 @@ private:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(Feature::Flags)
 
-using FeatureList = QVector<Feature>;
-using FeatureUidList = QStringList;
+using FeatureList = QList<Feature>;
+using FeatureUidList = QList<Feature::Uid>;

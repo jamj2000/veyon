@@ -1,6 +1,28 @@
-include(BuildPlugin)
+include(BuildVeyonPlugin)
 
 if(NOT VEYON_X11VNC_EXTERNAL)
+
+find_package(LibVNCServer 0.9.8)
+if(NOT LibVNCServer_FOUND)
+	### BEGIN: libvncserver configuration
+	include(LibVNCServerIntegration)
+
+	set(_RFB_RFBCONFIG_H TRUE)
+	set(LIBVNCSERVER_HAVE_LIBJPEG TRUE)
+	set(LIBVNCSERVER_HAVE_LZO TRUE)
+	set(LIBVNCSERVER_HAVE_LIBPNG TRUE)
+	set(LIBVNCSERVER_HAVE_LIBPTHREAD TRUE)
+	set(LIBVNCSERVER_HAVE_LIBZ TRUE)
+	set(LIBVNCSERVER_HAVE_LIBSSL TRUE)
+	set(LIBVNCSERVER_ALLOW24BPP TRUE)
+	set(LIBVNCSERVER_IPv6 TRUE)
+	### END: libvncserver configuration
+
+	# write libvncserver configuration header
+	file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/${VEYON_CORE_INCLUDE_DIR}/rfb)
+	configure_file(${CMAKE_SOURCE_DIR}/3rdparty/libvncserver/rfb/rfbconfig.h.cmakein ${CMAKE_BINARY_DIR}/${VEYON_CORE_INCLUDE_DIR}/rfb/rfbconfig.h @ONLY)
+
+endif()
 
 set(FULL_PACKAGE_NAME "Veyon")
 set(PACKAGE_VERSION "${VERSION_STRING}")
@@ -103,7 +125,7 @@ unset(CMAKE_REQUIRED_LIBRARIES)
 
 set(X11VNC_CONFIG ${CMAKE_BINARY_DIR}/config.h)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h @ONLY)
-
+if(NOT LibVNCServer_FOUND)
 set(libvncserver_SOURCES
 	${libvncserver_DIR}/libvncserver/auth.c
 	${libvncserver_DIR}/libvncserver/cargs.c
@@ -132,6 +154,7 @@ set(libvncserver_SOURCES
 	${libvncserver_DIR}/common/d3des.c
 	${libvncserver_DIR}/common/turbojpeg.c
 	${libvncserver_DIR}/common/vncauth.c)
+endif()
 
 set(x11vnc_SOURCES x11vnc-veyon.c
 	${x11vnc_DIR}/src/appshare.c
@@ -181,7 +204,7 @@ set_source_files_properties(${x11vnc_SOURCES} ${libvncserver_SOURCES} PROPERTIES
 
 endif()
 
-build_plugin(builtin-x11vnc-server
+build_veyon_plugin(builtin-x11vnc-server
 	BuiltinX11VncServer.cpp
 	X11VncConfigurationWidget.cpp
 	X11VncConfigurationWidget.ui
@@ -199,7 +222,9 @@ target_compile_definitions(builtin-x11vnc-server PRIVATE VEYON_X11VNC_EXTERNAL)
 else()
 
 target_compile_definitions(builtin-x11vnc-server PRIVATE VNCSHARED FOREVER NOREPEAT=0 NOPW=1 REMOTE_CONTROL=0 EXTERNAL_COMMANDS=0 FILEXFER=0 NOGUI SMALL_FOOTPRINT)
-target_include_directories(builtin-x11vnc-server PRIVATE ${libvncserver_DIR}/libvncserver ${libvncserver_DIR}/common ${3rdparty_DIR} ${x11vnc_DIR}/src)
+
+target_include_directories(builtin-x11vnc-server PRIVATE ${x11vnc_DIR}/src)
+
 target_link_libraries(builtin-x11vnc-server
 	${X11_LIBRARIES}
 	${X11_XTest_LIB}
@@ -208,6 +233,13 @@ target_link_libraries(builtin-x11vnc-server
 	${X11_Xdamage_LIB}
 	${X11_Xrandr_LIB}
 )
+
+if(LibVNCServer_FOUND)
+	#target_include_directories(builtin-x11vnc-server PRIVATE ${3rdparty_DIR} ${x11vnc_DIR}/src)
+	target_link_libraries(builtin-x11vnc-server LibVNC::LibVNCServer)
+else()
+	target_include_directories(builtin-x11vnc-server PRIVATE ${libvncserver_DIR}/libvncserver ${libvncserver_DIR}/common)
+endif()
 
 if(X11_XShm_FOUND)
 target_link_libraries(builtin-x11vnc-server ${X11_XShm_LIB})

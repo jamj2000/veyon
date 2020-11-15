@@ -39,6 +39,7 @@ VncServerProtocol::VncServerProtocol( QTcpSocket* socket,
 	m_client( client ),
 	m_serverInitMessage()
 {
+	m_client->setHostAddress( m_socket->peerAddress().toString() );
 	m_client->setAccessControlState( VncServerClient::AccessControlState::Init );
 }
 
@@ -53,7 +54,7 @@ VncServerProtocol::State VncServerProtocol::state() const
 
 void VncServerProtocol::start()
 {
-	if( state() == Disconnected )
+	if( state() == State::Disconnected )
 	{
 		std::array<char, sz_rfbProtocolVersionMsg+1> protocol{}; // Flawfinder: ignore
 
@@ -61,7 +62,7 @@ void VncServerProtocol::start()
 
 		m_socket->write( protocol.data(), sz_rfbProtocolVersionMsg );
 
-		setState( Protocol );
+		setState( State::Protocol );
 	}
 }
 
@@ -71,25 +72,25 @@ bool VncServerProtocol::read()
 {
 	switch( state() )
 	{
-	case Protocol:
+	case State::Protocol:
 		return readProtocol();
 
-	case SecurityInit:
+	case State::SecurityInit:
 		return receiveSecurityTypeResponse();
 
-	case AuthenticationTypes:
-		return receiveAuthenticationTypeResponse();
+	case State::AuthenticationMethods:
+		return receiveAuthenticationMethodResponse();
 
-	case Authenticating:
+	case State::Authenticating:
 		return receiveAuthenticationMessage();
 
-	case AccessControl:
+	case State::AccessControl:
 		return processAccessControl();
 
-	case FramebufferInit:
+	case State::FramebufferInit:
 		return processFramebufferInit();
 
-	case Close:
+	case State::Close:
 		vDebug() << "closing connection per protocol state";
 		m_socket->close();
 		break;
@@ -132,7 +133,7 @@ bool VncServerProtocol::readProtocol()
 			return false;
 		}
 
-		setState( SecurityInit );
+		setState( State::SecurityInit );
 
 		return sendSecurityTypes();
 	}
@@ -168,9 +169,9 @@ bool VncServerProtocol::receiveSecurityTypeResponse()
 			return false;
 		}
 
-		setState( AuthenticationTypes );
+		setState( State::AuthenticationMethods );
 
-		return sendAuthenticationTypes();
+		return sendAuthenticationMethods();
 	}
 
 	return false;
@@ -178,9 +179,9 @@ bool VncServerProtocol::receiveSecurityTypeResponse()
 
 
 
-bool VncServerProtocol::sendAuthenticationTypes()
+bool VncServerProtocol::sendAuthenticationMethods()
 {
-	const auto authTypes = supportedAuthPluginUids();
+	const auto authTypes = supportedAuthMethodUids();
 
 	VariantArrayMessage message( m_socket );
 	message.write( authTypes.count() );
@@ -195,16 +196,16 @@ bool VncServerProtocol::sendAuthenticationTypes()
 
 
 
-bool VncServerProtocol::receiveAuthenticationTypeResponse()
+bool VncServerProtocol::receiveAuthenticationMethodResponse()
 {
 	VariantArrayMessage message( m_socket );
 
 	if( message.isReadyForReceive() && message.receive() )
 	{
-		const auto chosenAuthPluginUid = message.read().toUuid();
+		const auto chosenAuthMethodUid = message.read().toUuid();
 
-		if( chosenAuthPluginUid .isNull() ||
-			supportedAuthPluginUids().contains( chosenAuthPluginUid  ) == false )
+		if( chosenAuthMethodUid.isNull() ||
+			supportedAuthMethodUids().contains( chosenAuthMethodUid  ) == false )
 		{
 			vCritical() << "unsupported authentication type chosen by client!";
 			m_socket->close();
@@ -214,11 +215,10 @@ bool VncServerProtocol::receiveAuthenticationTypeResponse()
 
 		const auto username = message.read().toString();
 
-		m_client->setAuthPluginUid( chosenAuthPluginUid  );
+		m_client->setAuthMethodUid( chosenAuthMethodUid );
 		m_client->setUsername( username );
-		m_client->setHostAddress( m_socket->peerAddress().toString() );
 
-		setState( Authenticating );
+		setState( State::Authenticating );
 
 		// send auth ack message
 		VariantArrayMessage( m_socket ).send();
@@ -258,7 +258,7 @@ bool VncServerProtocol::processAuthentication( VariantArrayMessage& message )
 		const auto authResult = qToBigEndian<uint32_t>(rfbVncAuthOK);
 		m_socket->write( reinterpret_cast<const char *>( &authResult ), sizeof(authResult) );
 
-		setState( AccessControl );
+		setState( State::AccessControl );
 		return true;
 	}
 
@@ -284,7 +284,7 @@ bool VncServerProtocol::processAccessControl()
 	switch( m_client->accessControlState() )
 	{
 	case VncServerClient::AccessControlState::Successful:
-		setState( FramebufferInit );
+		setState( State::FramebufferInit );
 		return true;
 
 	case VncServerClient::AccessControlState::Pending:
@@ -312,7 +312,7 @@ bool VncServerProtocol::processFramebufferInit()
 
 		m_socket->write( m_serverInitMessage );
 
-		setState( Running );
+		setState( State::Running );
 
 		return true;
 	}

@@ -41,7 +41,7 @@ ComputerControlServer::ComputerControlServer( QObject* parent ) :
 	m_serverAccessControlManager( m_featureWorkerManager, VeyonCore::builtinFeatures().desktopAccessDialog(), this ),
 	m_vncProxyServer( VeyonCore::config().localConnectOnly() || AccessControlProvider().isAccessToLocalComputerDenied() ?
 						  QHostAddress::LocalHost : QHostAddress::Any,
-					  VeyonCore::config().primaryServicePort() + VeyonCore::sessionId(),
+					  VeyonCore::config().veyonServerPort() + VeyonCore::sessionId(),
 					  this,
 					  this )
 {
@@ -90,7 +90,13 @@ VncProxyConnection* ComputerControlServer::createVncProxyConnection( QTcpSocket*
 																	 const Password& vncServerPassword,
 																	 QObject* parent )
 {
-	return new ComputerControlClient( this, clientSocket, vncServerPort, vncServerPassword, parent );
+	auto client = new ComputerControlClient( this, clientSocket, vncServerPort, vncServerPassword, parent );
+
+	connect( client, &ComputerControlClient::serverConnectionClosed, this,
+		[=]() { checkForIncompleteAuthentication( client->serverClient() ); },
+		Qt::DirectConnection );
+
+	return client;
 }
 
 
@@ -127,6 +133,21 @@ bool ComputerControlServer::sendFeatureMessageReply( const MessageContext& conte
 	context.ioDevice()->write( &rfbMessageType, sizeof(rfbMessageType) );
 
 	return reply.send( context.ioDevice() );
+}
+
+
+
+void ComputerControlServer::checkForIncompleteAuthentication( VncServerClient* client )
+{
+	// connection to client closed during authentication?
+	if( client->protocolState() == VncServerProtocol::State::AuthenticationMethods ||
+		client->protocolState() == VncServerProtocol::State::Authenticating )
+	{
+		// then mark as failed authentication and report it
+		client->setAuthState( VncServerClient::AuthState::Failed );
+
+		showAuthenticationMessage( client );
+	}
 }
 
 
@@ -209,7 +230,7 @@ void ComputerControlServer::updateTrayIconToolTip()
 {
 	auto toolTip = tr( "%1 Service %2 at %3:%4" ).arg( VeyonCore::applicationName(), VeyonCore::versionString(),
 													   HostAddress::localFQDN(),
-												QString::number( VeyonCore::config().primaryServicePort() + VeyonCore::sessionId() ) );
+												QString::number( VeyonCore::config().veyonServerPort() + VeyonCore::sessionId() ) );
 
 	QStringList clients;
 	for( const auto* client : m_vncProxyServer.clients() )

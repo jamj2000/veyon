@@ -36,14 +36,14 @@ class VEYON_CORE_EXPORT VncViewWidget : public QWidget, public VncView
 {
 	Q_OBJECT
 public:
-	VncViewWidget( const QString& host, int port, QWidget* parent, Mode mode );
+	VncViewWidget( const QString& host, int port, QWidget* parent, Mode mode, const QRect& viewport = {} );
 	~VncViewWidget() override;
 
 	QSize sizeHint() const override;
 
 	void setViewOnly( bool enabled ) override;
 
-signals:
+Q_SIGNALS:
 	void mouseAtBorder();
 	void startConnection();
 	void connectionEstablished();

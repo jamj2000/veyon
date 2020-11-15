@@ -54,12 +54,13 @@ public:
 		return m_connections;
 	}
 
-signals:
+Q_SIGNALS:
 	void connectionClosed( VncProxyConnection* connection );
 
 private:
 	void acceptConnection();
 	void closeConnection( VncProxyConnection* );
+	void handleAcceptError( QAbstractSocket::SocketError socketError );
 
 	int m_vncServerPort{-1};
 	Password m_vncServerPassword{};

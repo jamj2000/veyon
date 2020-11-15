@@ -41,15 +41,12 @@
 #  define VEYON_CORE_EXPORT Q_DECL_IMPORT
 #endif
 
-#define QSL QStringLiteral
-
 class QCoreApplication;
 class QWidget;
 
 class AuthenticationCredentials;
 class AuthenticationManager;
 class BuiltinFeatures;
-class ComputerControlInterface;
 class CryptoCore;
 class Filesystem;
 class Logger;
@@ -72,6 +69,8 @@ public:
 		Version_4_1,
 		Version_4_2,
 		Version_4_3,
+		Version_4_4,
+		Version_4_5,
 		Version_5_0,
 	};
 	Q_ENUM(ApplicationVersion)
@@ -163,15 +162,12 @@ public:
 		return *( instance()->m_filesystem );
 	}
 
-	static ComputerControlInterface& localComputerControlInterface()
-	{
-		return *( instance()->m_localComputerControlInterface );
-	}
-
 	static void setupApplicationParameters();
 
-	static bool hasSessionId();
-	static int sessionId();
+	static int sessionId()
+	{
+		return instance()->m_sessionId;
+	}
 
 	static QString applicationName();
 	static void enforceBranding( QWidget* topLevelWidget );
@@ -188,6 +184,7 @@ public:
 
 private:
 	void initPlatformPlugin();
+	void initSession();
 	void initConfiguration();
 	void initLogging( const QString& appComponentName );
 	void initLocaleAndTranslation();
@@ -215,13 +212,14 @@ private:
 	UserGroupsBackendManager* m_userGroupsBackendManager;
 	NetworkObjectDirectoryManager* m_networkObjectDirectoryManager;
 
-	ComputerControlInterface* m_localComputerControlInterface;
-
 	Component m_component;
 	QString m_applicationName;
 	bool m_debugging;
 
-signals:
+	int m_sessionId{0};
+
+Q_SIGNALS:
+	void initialized();
 	void applicationLoaded();
 
 };

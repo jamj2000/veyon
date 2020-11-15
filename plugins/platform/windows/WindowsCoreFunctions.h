@@ -48,7 +48,7 @@ public:
 	void reboot() override;
 	void powerDown( bool installUpdates ) override;
 
-	void raiseWindow( QWidget* widget ) override;
+	void raiseWindow( QWidget* widget, bool stayOnTop ) override;
 
 	void disableScreenSaver() override;
 	void restoreScreenSaverSettings() override;
@@ -77,8 +77,6 @@ public:
 									   const QStringList& extraEnvironment,
 									   DWORD baseProcessId,
 									   const QString& desktop );
-
-	static QStringList sessionIdEnvironment();
 
 	static bool terminateProcess( ProcessId processId, DWORD timeout = DefaultProcessTerminationTimeout );
 

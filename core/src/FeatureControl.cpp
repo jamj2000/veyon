@@ -41,22 +41,30 @@ FeatureControl::FeatureControl( QObject* parent ) :
 
 
 
-bool FeatureControl::queryActiveFeatures( const ComputerControlInterfaceList& computerControlInterfaces )
+void FeatureControl::queryActiveFeatures( const ComputerControlInterfaceList& computerControlInterfaces )
 {
-	return sendFeatureMessage( FeatureMessage( m_featureControlFeature.uid(), QueryActiveFeatures ),
-							   computerControlInterfaces, false );
+	sendFeatureMessage( FeatureMessage{ m_featureControlFeature.uid(), QueryActiveFeatures },
+						computerControlInterfaces, false );
 }
 
 
 
-bool FeatureControl::handleFeatureMessage( VeyonMasterInterface& master, const FeatureMessage& message,
-										   ComputerControlInterface::Pointer computerControlInterface )
+bool FeatureControl::handleFeatureMessage( ComputerControlInterface::Pointer computerControlInterface,
+										  const FeatureMessage& message )
 {
-	Q_UNUSED(master)
-
 	if( message.featureUid() == m_featureControlFeature.uid() )
 	{
-		computerControlInterface->setActiveFeatures( message.argument( ActiveFeatureList ).toStringList() );
+		const auto featureUidStrings = message.argument( Argument::ActiveFeaturesList ).toStringList();
+
+		FeatureUidList activeFeatures{};
+		activeFeatures.reserve( featureUidStrings.size() );
+
+		for( const auto& featureUidString : featureUidStrings )
+		{
+			activeFeatures.append( featureUidString );
+		}
+
+		computerControlInterface->setActiveFeatures( activeFeatures );
 
 		return true;
 	}
@@ -72,8 +80,18 @@ bool FeatureControl::handleFeatureMessage( VeyonServerInterface& server,
 {
 	if( m_featureControlFeature.uid() == message.featureUid() )
 	{
+		const auto featureUids = server.featureWorkerManager().runningWorkers();
+
+		QStringList featureUidStrings;
+		featureUidStrings.reserve( featureUids.size() );
+
+		for( const auto& featureUid : featureUids )
+		{
+			featureUidStrings.append( featureUid.toString() );
+		}
+
 		FeatureMessage reply( message.featureUid(), message.command() );
-		reply.addArgument( ActiveFeatureList, server.featureWorkerManager().runningWorkers() );
+		reply.addArgument( Argument::ActiveFeaturesList, featureUidStrings );
 
 		return server.sendFeatureMessageReply( messageContext, reply );
 	}

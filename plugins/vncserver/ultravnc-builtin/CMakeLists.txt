@@ -1,6 +1,10 @@
 add_subdirectory(vnchooks)
 
-include(BuildPlugin)
+include(BuildVeyonPlugin)
+
+find_package(ZLIB REQUIRED)
+find_package(JPEG REQUIRED)
+find_package(LZO REQUIRED)
 
 add_definitions(-D_WIN32_WINNT=0x0602)
 
@@ -53,6 +57,7 @@ set(ultravnc_CXX_SOURCES
 	${ultravnc_DIR}/winvnc/omnithread/nt.cpp
 	${ultravnc_DIR}/common/Clipboard.cpp
 	${ultravnc_DIR}/common/win32_helpers.cpp
+	${ultravnc_DIR}/common/UltraVncZ.cpp
 	${ultravnc_DIR}/rfb/dh.cpp
 	${ultravnc_DIR}/rdr/ZlibOutStream.cxx
 	${ultravnc_DIR}/rdr/ZlibInStream.cxx
@@ -65,7 +70,7 @@ set(ultravnc_C_SOURCES
 	${ultravnc_DIR}/winvnc/winvnc/vncauth.c
 	)
 
-build_plugin(builtin-ultravnc-server
+build_veyon_plugin(builtin-ultravnc-server
 	BuiltinUltraVncServer.cpp
 	LogoffEventFilter.cpp
 	UltraVncConfigurationWidget.cpp
@@ -78,9 +83,8 @@ build_plugin(builtin-ultravnc-server
 	UltraVncConfiguration.h
 )
 
-target_link_libraries(builtin-ultravnc-server -luserenv -lole32 -lversion -lgdi32 -limm32 -lwinmm)
+target_link_libraries(builtin-ultravnc-server -luserenv -lole32 -lversion -lgdi32 -limm32 -lwinmm ${ZLIB_LIBRARIES} ${JPEG_LIBRARIES} ${LZO_LIBRARIES})
 target_include_directories(builtin-ultravnc-server PRIVATE
-	${libvncserver_DIR}
 	${ultravnc_DIR}
 	${ultravnc_DIR}/winvnc
 	${ultravnc_DIR}/winvnc/omnithread

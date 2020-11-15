@@ -22,6 +22,7 @@
  *
  */
 
+#include <QHostAddress>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -52,6 +53,12 @@ VeyonMaster::VeyonMaster( QObject* parent ) :
 	m_computerControlListModel( new ComputerControlListModel( this, this ) ),
 	m_computerMonitoringModel( new ComputerMonitoringModel( m_computerControlListModel, this ) ),
 	m_computerSelectModel( new ComputerSelectModel( m_computerManager->computerTreeModel(), this ) ),
+	m_localSessionControlInterface( Computer( NetworkObject::Uid::createUuid(),
+											  QStringLiteral("localhost"),
+											  QStringLiteral("%1:%2").
+											  arg( QHostAddress( QHostAddress::LocalHost ).toString() ).
+											  arg( VeyonCore::config().veyonServerPort() + VeyonCore::sessionId() ) ),
+									this ),
 	m_currentMode( VeyonCore::builtinFeatures().monitoringMode().feature().uid() )
 {
 	if( VeyonCore::config().enforceSelectedModeForClients() )
@@ -60,12 +67,12 @@ VeyonMaster::VeyonMaster( QObject* parent ) :
 				 this, &VeyonMaster::enforceDesignatedMode );
 	}
 
-	connect( &VeyonCore::localComputerControlInterface(), &ComputerControlInterface::featureMessageReceived,
-			 this, [=]( const FeatureMessage& featureMessage, ComputerControlInterface::Pointer computerControlInterface ) {
-			 m_featureManager->handleFeatureMessage( *this, featureMessage, computerControlInterface );
+	connect( &m_localSessionControlInterface, &ComputerControlInterface::featureMessageReceived,
+			 this, [=]( const FeatureMessage& featureMessage, const ComputerControlInterface::Pointer& computerControlInterface ) {
+			 m_featureManager->handleFeatureMessage( computerControlInterface, featureMessage );
 	} );
 
-	VeyonCore::localComputerControlInterface().start( QSize(), ComputerControlInterface::UpdateMode::Monitoring );
+	m_localSessionControlInterface.start();
 
 	initUserInterface();
 }
@@ -115,6 +122,54 @@ FeatureList VeyonMaster::subFeatures( Feature::Uid parentFeatureUid ) const
 
 
 
+FeatureUidList VeyonMaster::subFeaturesUids( Feature::Uid parentFeatureUid ) const
+{
+	FeatureUidList featureUids;
+
+	const auto disabledFeatures = VeyonCore::config().disabledFeatures();
+	const auto pluginUids = VeyonCore::pluginManager().pluginUids();
+
+	for( const auto& pluginUid : pluginUids )
+	{
+		for( const auto& feature : m_featureManager->features( pluginUid ) )
+		{
+			if( feature.testFlag( Feature::Master ) &&
+				feature.parentUid() == parentFeatureUid &&
+				disabledFeatures.contains( parentFeatureUid.toString() ) == false &&
+				disabledFeatures.contains( feature.uid().toString() ) == false )
+			{
+				featureUids += feature.uid();
+			}
+		}
+	}
+
+	return featureUids;
+}
+
+
+
+FeatureList VeyonMaster::modeFeatures() const
+{
+	FeatureList featureList;
+
+	for( const auto& feature : qAsConst( features() ) )
+	{
+		if( feature.testFlag( Feature::Mode ) )
+		{
+			featureList.append( feature );
+			const auto modeSubFeatures = subFeatures( feature.uid() );
+			for( const auto& subFeature : modeSubFeatures )
+			{
+				featureList.append( subFeature );
+			}
+		}
+	}
+
+	return featureList;
+}
+
+
+
 QWidget* VeyonMaster::mainWindow()
 {
 	return m_mainWindow;
@@ -135,6 +190,13 @@ void VeyonMaster::reloadSubFeatures()
 	{
 		m_mainWindow->reloadSubFeatures();
 	}
+}
+
+
+
+ComputerControlInterfaceList VeyonMaster::selectedComputerControlInterfaces() const
+{
+	return m_mainWindow->selectedComputerControlInterfaces();
 }
 
 
@@ -166,7 +228,8 @@ void VeyonMaster::runFeature( const Feature& feature )
 	{
 		stopAllModeFeatures( computerControlInterfaces );
 
-		if( m_currentMode == feature.uid() )
+		if( m_currentMode == feature.uid() ||
+			subFeatures( feature.uid() ).contains( m_featureManager->feature( m_currentMode ) ) )
 		{
 			const Feature& monitoringModeFeature = VeyonCore::builtinFeatures().monitoringMode().feature();
 
@@ -195,9 +258,10 @@ void VeyonMaster::enforceDesignatedMode( const QModelIndex& index )
 		auto designatedModeFeature = m_featureManager->feature( controlInterface->designatedModeFeature() );
 
 		// stop all other active mode feature
-		for( const auto& currentFeature : features() )
+		const auto features = modeFeatures();
+		for( const auto& currentFeature : features )
 		{
-			if( currentFeature.testFlag( Feature::Mode ) && currentFeature != designatedModeFeature )
+			if( currentFeature != designatedModeFeature )
 			{
 				featureManager().stopFeature( *this, currentFeature, { controlInterface } );
 			}
@@ -214,13 +278,11 @@ void VeyonMaster::enforceDesignatedMode( const QModelIndex& index )
 
 void VeyonMaster::stopAllModeFeatures( const ComputerControlInterfaceList& computerControlInterfaces )
 {
-	// stop any previously active featues
-	for( const auto& feature : qAsConst( features() ) )
+	const auto features = modeFeatures();
+
+	for( const auto& feature : features )
 	{
-		if( feature.testFlag( Feature::Mode ) )
-		{
-			m_featureManager->stopFeature( *this, feature, computerControlInterfaces );
-		}
+		m_featureManager->stopFeature( *this, feature, computerControlInterfaces );
 	}
 }
 
@@ -228,11 +290,7 @@ void VeyonMaster::stopAllModeFeatures( const ComputerControlInterfaceList& compu
 
 void VeyonMaster::initUserInterface()
 {
-	if( VeyonCore::config().classicUserInterface() )
-	{
-		m_mainWindow = new MainWindow( *this );
-	}
-	else
+	if( VeyonCore::config().modernUserInterface() )
 	{
 		QQuickStyle::setStyle( QStringLiteral("Material") );
 
@@ -249,6 +307,10 @@ void VeyonMaster::initUserInterface()
 		m_qmlAppEngine->rootContext()->setContextProperty( QStringLiteral("masterCore"), this );
 		m_qmlAppEngine->load( QStringLiteral(":/master/main.qml") );
 	}
+	else
+	{
+		m_mainWindow = new MainWindow( *this );
+	}
 }
 
 
@@ -258,7 +320,7 @@ void VeyonMaster::setAppWindow( QQuickWindow* appWindow )
 	if( m_appWindow != appWindow )
 	{
 		m_appWindow = appWindow;
-		emit appWindowChanged();
+		Q_EMIT appWindowChanged();
 	}
 }
 
@@ -269,7 +331,7 @@ void VeyonMaster::setAppContainer( QQuickItem* appContainer )
 	if( m_appContainer != appContainer )
 	{
 		m_appContainer = appContainer;
-		emit appContainerChanged();
+		Q_EMIT appContainerChanged();
 	}
 }
 

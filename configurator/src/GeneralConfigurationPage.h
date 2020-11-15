@@ -32,7 +32,7 @@ class GeneralConfigurationPage : public ConfigurationPage
 {
 	Q_OBJECT
 public:
-	GeneralConfigurationPage();
+	GeneralConfigurationPage( QWidget* parent = nullptr );
 	~GeneralConfigurationPage() override;
 
 	void resetWidgets() override;
@@ -40,9 +40,6 @@ public:
 	void applyConfiguration() override;
 
 private:
-	void configureAuthentication();
-	void testAuthentication();
-
 	void openLogFileDirectory();
 	void clearLogFiles();
 

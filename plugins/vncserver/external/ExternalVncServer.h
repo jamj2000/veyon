@@ -71,13 +71,18 @@ public:
 		return Plugin::NoFlags;
 	}
 
+	QStringList supportedSessionTypes() const override
+	{
+		return {};
+	}
+
 	void upgrade( const QVersionNumber& oldVersion ) override;
 
 	QWidget* configurationWidget() override;
 
 	void prepareServer() override;
 
-	void runServer( int serverPort, const Password& password ) override;
+	bool runServer( int serverPort, const Password& password ) override;
 
 	int configuredServerPort() override;
 

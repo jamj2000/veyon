@@ -33,11 +33,25 @@
 #include "ComputerListModel.h"
 #include "Logger.h"
 #include "NetworkObjectDirectory.h"
+#include "VncConnection.h"
 
 #define FOREACH_VEYON_CORE_CONFIG_PROPERTIES(OP)		\
 	OP( VeyonConfiguration, VeyonCore::config(), VeyonCore::ApplicationVersion, applicationVersion, setApplicationVersion, "ApplicationVersion", "Core", QVariant::fromValue(VeyonCore::ApplicationVersion::Version_4_0), Configuration::Property::Flag::Hidden )			\
 	OP( VeyonConfiguration, VeyonCore::config(), QJsonObject, pluginVersions, setPluginVersions, "PluginVersions", "Core", QJsonObject(), Configuration::Property::Flag::Hidden )			\
 	OP( VeyonConfiguration, VeyonCore::config(), QString, installationID, setInstallationID, "InstallationID", "Core", QString(), Configuration::Property::Flag::Hidden )			\
+
+#define FOREACH_VEYON_VNC_CONNECTION_CONFIG_PROPERTIES(OP)		\
+	OP( VeyonConfiguration, VeyonCore::config(), bool, useCustomVncConnectionSettings, setUseCustomVncConnectionSettings, "UseCustomSettings", "VncConnection", false, Configuration::Property::Flag::Hidden )			\
+	OP( VeyonConfiguration, VeyonCore::config(), int, vncConnectionThreadTerminationTimeout, setVncConnectionThreadTerminationTimeout, "ThreadTerminationTimeout", "VncConnection", VncConnection::DefaultThreadTerminationTimeout, Configuration::Property::Flag::Hidden )			\
+	OP( VeyonConfiguration, VeyonCore::config(), int, vncConnectionConnectTimeout, setVncConnectionConnectTimeout, "ConnectTimeout", "VncConnection", VncConnection::DefaultConnectTimeout, Configuration::Property::Flag::Hidden )			\
+	OP( VeyonConfiguration, VeyonCore::config(), int, vncConnectionReadTimeout, setVncConnectionReadTimeout, "ReadTimeout", "VncConnection", VncConnection::DefaultReadTimeout, Configuration::Property::Flag::Hidden )			\
+	OP( VeyonConfiguration, VeyonCore::config(), int, vncConnectionRetryInterval, setVncConnectionRetryInterval, "ConnectionRetryInterval", "VncConnection", VncConnection::DefaultConnectionRetryInterval, Configuration::Property::Flag::Hidden )			\
+	OP( VeyonConfiguration, VeyonCore::config(), int, vncConnectionMessageWaitTimeout, setVncConnectionMessageWaitTimeout, "MessageWaitTimeout", "VncConnection", VncConnection::DefaultMessageWaitTimeout, Configuration::Property::Flag::Hidden )			\
+	OP( VeyonConfiguration, VeyonCore::config(), int, vncConnectionFastFramebufferUpdateInterval, setVncConnectionFastFramebufferUpdateInterval, "FastFramebufferUpdateInterval", "VncConnection", VncConnection::DefaultFastFramebufferUpdateInterval, Configuration::Property::Flag::Hidden )			\
+	OP( VeyonConfiguration, VeyonCore::config(), int, vncConnectionFramebufferUpdateWatchdogTimeout, setVncConnectionFramebufferUpdateWatchdogTimeout, "FramebufferUpdateWatchdogTimeout", "VncConnection", VncConnection::DefaultFramebufferUpdateWatchdogTimeout, Configuration::Property::Flag::Hidden )			\
+	OP( VeyonConfiguration, VeyonCore::config(), int, vncConnectionSocketKeepaliveIdleTime, setVncConnectionSocketKeepaliveIdleTime, "SocketKeepaliveIdleTime", "VncConnection", VncConnection::DefaultSocketKeepaliveIdleTime, Configuration::Property::Flag::Hidden )			\
+	OP( VeyonConfiguration, VeyonCore::config(), int, vncConnectionSocketKeepaliveInterval, setVncConnectionSocketKeepaliveInterval, "SocketKeepaliveInterval", "VncConnection", VncConnection::DefaultSocketKeepaliveInterval, Configuration::Property::Flag::Hidden )			\
+	OP( VeyonConfiguration, VeyonCore::config(), int, vncConnectionSocketKeepaliveCount, setVncConnectionSocketKeepaliveCount, "SocketKeepaliveCount", "VncConnection", VncConnection::DefaultSocketKeepaliveCount, Configuration::Property::Flag::Hidden )			\
 
 #define FOREACH_VEYON_UI_CONFIG_PROPERTY(OP)				\
 	OP( VeyonConfiguration, VeyonCore::config(), QString, applicationName, setApplicationName, "ApplicationName", "UI", QStringLiteral("Veyon"), Configuration::Property::Flag::Hidden )			\
@@ -47,7 +61,8 @@
 	OP( VeyonConfiguration, VeyonCore::config(), bool, isTrayIconHidden, setTrayIconHidden, "HideTrayIcon", "Service", false, Configuration::Property::Flag::Advanced )			\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, failedAuthenticationNotificationsEnabled, setFailedAuthenticationNotificationsEnabled, "FailedAuthenticationNotifications", "Service", true, Configuration::Property::Flag::Standard )			\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, remoteConnectionNotificationsEnabled, setRemoteConnectionNotificationsEnabled, "RemoteConnectionNotifications", "Service", false, Configuration::Property::Flag::Standard )			\
-	OP( VeyonConfiguration, VeyonCore::config(), bool, multiSessionModeEnabled, setMultiSessionModeEnabled, "MultiSession", "Service", false, Configuration::Property::Flag::Advanced )			\
+	OP( VeyonConfiguration, VeyonCore::config(), bool, multiSessionModeEnabled, setMultiSessionModeEnabled, "MultiSession", "Service", false, Configuration::Property::Flag::Standard )			\
+	OP( VeyonConfiguration, VeyonCore::config(), int, maximumSessionCount, setMaximumSessionCount, "MaximumSessionCount", "Service", 100, Configuration::Property::Flag::Standard ) \
 	OP( VeyonConfiguration, VeyonCore::config(), bool, autostartService, setServiceAutostart, "Autostart", "Service", true, Configuration::Property::Flag::Advanced )			\
 
 #define FOREACH_VEYON_NETWORK_OBJECT_DIRECTORY_CONFIG_PROPERTY(OP)				\
@@ -71,7 +86,7 @@
 	OP( VeyonConfiguration, VeyonCore::config(), QUuid, vncServerPlugin, setVncServerPlugin, "Plugin", "VncServer", QUuid(), Configuration::Property::Flag::Standard )	\
 
 #define FOREACH_VEYON_NETWORK_CONFIG_PROPERTY(OP) \
-	OP( VeyonConfiguration, VeyonCore::config(), int, primaryServicePort, setPrimaryServicePort, "PrimaryServicePort", "Network", 11100, Configuration::Property::Flag::Advanced )			\
+	OP( VeyonConfiguration, VeyonCore::config(), int, veyonServerPort, setVeyonServerPort, "VeyonServerPort", "Network", 11100, Configuration::Property::Flag::Advanced )			\
 	OP( VeyonConfiguration, VeyonCore::config(), int, vncServerPort, setVncServerPort, "VncServerPort", "Network", 11200, Configuration::Property::Flag::Advanced )			\
 	OP( VeyonConfiguration, VeyonCore::config(), int, featureWorkerManagerPort, setFeatureWorkerManagerPort, "FeatureWorkerManagerPort", "Network", 11300, Configuration::Property::Flag::Advanced )			\
 	OP( VeyonConfiguration, VeyonCore::config(), int, demoServerPort, setDemoServerPort, "DemoServerPort", "Network", 11400, Configuration::Property::Flag::Advanced )			\
@@ -83,27 +98,30 @@
 	OP( VeyonConfiguration, VeyonCore::config(), QString, screenshotDirectory, setScreenshotDirectory, "Screenshots", "Directories", QDir::toNativeSeparators( QStringLiteral( "%APPDATA%/Screenshots" ) ), Configuration::Property::Flag::Standard )	\
 
 #define FOREACH_VEYON_MASTER_CONFIG_PROPERTY(OP) \
-	OP( VeyonConfiguration, VeyonCore::config(), bool, classicUserInterface, setClassicUserInterface, "ClassicUserInterface", "Master", false, Configuration::Property::Flag::Standard )	\
+	OP( VeyonConfiguration, VeyonCore::config(), bool, modernUserInterface, setModernUserInterface, "ModernUserInterface", "Master", false, Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), int, computerMonitoringUpdateInterval, setComputerMonitoringUpdateInterval, "ComputerMonitoringUpdateInterval", "Master", 1000, Configuration::Property::Flag::Standard )	\
+	OP( VeyonConfiguration, VeyonCore::config(), int, computerMonitoringThumbnailSpacing, setComputerMonitoringThumbnailSpacing, "ComputerMonitoringThumbnailSpacing", "Master", 5, Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), ComputerListModel::DisplayRoleContent, computerDisplayRoleContent, setComputerDisplayRoleContent, "ComputerDisplayRoleContent", "Master", QVariant::fromValue(ComputerListModel::DisplayRoleContent::UserAndComputerName), Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), ComputerListModel::SortOrder, computerMonitoringSortOrder, setComputerMonitoringSortOrder, "ComputerMonitoringSortOrder", "Master", QVariant::fromValue(ComputerListModel::SortOrder::ComputerAndUserName), Configuration::Property::Flag::Standard )	\
+	OP( VeyonConfiguration, VeyonCore::config(), ComputerListModel::AspectRatio, computerMonitoringAspectRatio, setComputerMonitoringAspectRatio, "ComputerMonitoringAspectRatio", "Master", QVariant::fromValue(ComputerListModel::AspectRatio::Auto), Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), QColor, computerMonitoringBackgroundColor, setComputerMonitoringBackgroundColor, "ComputerMonitoringBackgroundColor", "Master", QColor(Qt::white), Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), QColor, computerMonitoringTextColor, setComputerMonitoringTextColor, "ComputerMonitoringTextColor", "Master", QColor(Qt::black), Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, accessControlForMasterEnabled, setAccessControlForMasterEnabled, "AccessControlForMasterEnabled", "Master", false, Configuration::Property::Flag::Standard )	\
-	OP( VeyonConfiguration, VeyonCore::config(), bool, autoAdjustGridSize, setAutoAdjustGridSize, "AutoAdjustGridSize", "Master", false, Configuration::Property::Flag::Standard )	\
+	OP( VeyonConfiguration, VeyonCore::config(), bool, autoAdjustMonitoringIconSize, setAutoAdjustMonitoringIconSize, "AutoAdjustMonitoringIconSize", "Master", false, Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, autoSelectCurrentLocation, setAutoSelectCurrentLocation, "AutoSelectCurrentLocation", "Master", false, Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, showCurrentLocationOnly, setShowCurrentLocationOnly, "ShowCurrentLocationOnly", "Master", false, Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, allowAddingHiddenLocations, setAllowAddingHiddenLocations, "AllowAddingHiddenLocations", "Master", false, Configuration::Property::Flag::Standard )	\
-	OP( VeyonConfiguration, VeyonCore::config(), bool, localComputerHidden, setLocalComputerHidden, "LocalComputerHidden", "Master", false, Configuration::Property::Flag::Standard )	\
+	OP( VeyonConfiguration, VeyonCore::config(), bool, hideLocalComputer, setHideLocalComputer, "HideLocalComputer", "Master", false, Configuration::Property::Flag::Standard )	\
+	OP( VeyonConfiguration, VeyonCore::config(), bool, hideOwnSession, setHideOwnSession, "HideOwnSession", "Master", false, Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, hideEmptyLocations, setHideEmptyLocations, "HideEmptyLocations", "Master", false, Configuration::Property::Flag::Standard )	\
-	OP( VeyonConfiguration, VeyonCore::config(), bool, computerFilterHidden, setComputerFilterHidden, "ComputerFilterHidden", "Master", false, Configuration::Property::Flag::Standard )	\
+	OP( VeyonConfiguration, VeyonCore::config(), bool, hideComputerFilter, setHideComputerFilter, "HideComputerFilter", "Master", false, Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), QUuid, computerDoubleClickFeature, setComputerDoubleClickFeature, "ComputerDoubleClickFeature", "Master", QUuid(), Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, enforceSelectedModeForClients, setEnforceSelectedModeForClients, "EnforceSelectedModeForClients", "Master", false, Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, autoOpenComputerSelectPanel, setAutoOpenComputerSelectPanel, "AutoOpenComputerSelectPanel", "Master", false, Configuration::Property::Flag::Standard )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, confirmUnsafeActions, setConfirmUnsafeActions, "ConfirmUnsafeActions", "Master", false, Configuration::Property::Flag::Standard )	\
 
 #define FOREACH_VEYON_AUTHENTICATION_CONFIG_PROPERTY(OP) \
-	OP( VeyonConfiguration, VeyonCore::config(), QUuid, authenticationPlugin, setAuthenticationPlugin, "Plugin", "Authentication", QUuid(), Configuration::Property::Flag::Standard )	\
+	OP( VeyonConfiguration, VeyonCore::config(), QStringList, enabledAuthenticationPlugins, setEnabledAuthenticationPlugins, "EnabledPlugins", "Authentication", QStringList(), Configuration::Property::Flag::Standard )	\
 
 #define FOREACH_VEYON_ACCESS_CONTROL_CONFIG_PROPERTY(OP)		\
 	OP( VeyonConfiguration, VeyonCore::config(), QUuid, accessControlUserGroupsBackend, setAccessControlUserGroupsBackend, "UserGroupsBackend", "AccessControl", QUuid(), Configuration::Property::Flag::Standard )		\
@@ -114,6 +132,7 @@
 	OP( VeyonConfiguration, VeyonCore::config(), QJsonArray, accessControlRules, setAccessControlRules, "AccessControlRules", "AccessControl", QJsonArray(), Configuration::Property::Flag::Standard )	\
 
 #define FOREACH_VEYON_LEGACY_CONFIG_PROPERTY(OP) \
+	OP( VeyonConfiguration, VeyonCore::config(), bool, legacyAutoAdjustGridSize, setLegacyAutoAdjustGridSize, "AutoAdjustGridSize", "Master", false, Configuration::Property::Flag::Legacy )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, legacyOpenComputerManagementAtStart, setLegacyOpenComputerManagementAtStart, "OpenComputerManagementAtStart", "Master", false, Configuration::Property::Flag::Legacy )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, legacyAutoSwitchToCurrentRoom, setLegacyAutoSwitchToCurrentRoom, "AutoSwitchToCurrentRoom", "Master", false, Configuration::Property::Flag::Legacy )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, legacyOnlyCurrentRoomVisible, setLegacyOnlyCurrentRoomVisible, "OnlyCurrentRoomVisible", "Master", false, Configuration::Property::Flag::Legacy )	\
@@ -121,9 +140,13 @@
 	OP( VeyonConfiguration, VeyonCore::config(), bool, legacyEmptyRoomsHidden, setLegacyEmptyRoomsHidden, "EmptyRoomsHidden", "Master", false, Configuration::Property::Flag::Legacy )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, legacyConfirmDangerousActions, setLegacyConfirmDangerousActions, "ConfirmDangerousActions", "Master", false, Configuration::Property::Flag::Legacy )	\
 	OP( VeyonConfiguration, VeyonCore::config(), bool, legacyIsSoftwareSASEnabled, setLegacySoftwareSASEnabled, "SoftwareSASEnabled", "Service", true, Configuration::Property::Flag::Legacy )			\
+	OP( VeyonConfiguration, VeyonCore::config(), bool, legacyLocalComputerHidden, setLegacyLocalComputerHidden, "LocalComputerHidden", "Master", false, Configuration::Property::Flag::Legacy )       \
+	OP( VeyonConfiguration, VeyonCore::config(), bool, legacyComputerFilterHidden, setLegacyComputerFilterHidden, "ComputerFilterHidden", "Master", false, Configuration::Property::Flag::Legacy )	\
+	OP( VeyonConfiguration, VeyonCore::config(), int, legacyPrimaryServicePort, setLegacyPrimaryServicePort, "PrimaryServicePort", "Network", 11100, Configuration::Property::Flag::Legacy )			\
 
 #define FOREACH_VEYON_CONFIG_PROPERTY(OP)				\
 	FOREACH_VEYON_CORE_CONFIG_PROPERTIES(OP)			\
+	FOREACH_VEYON_VNC_CONNECTION_CONFIG_PROPERTIES(OP)	\
 	FOREACH_VEYON_UI_CONFIG_PROPERTY(OP)				\
 	FOREACH_VEYON_SERVICE_CONFIG_PROPERTY(OP)			\
 	FOREACH_VEYON_LOGGING_CONFIG_PROPERTY(OP)			\

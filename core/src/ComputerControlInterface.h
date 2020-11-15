@@ -62,7 +62,7 @@ public:
 		return m_connection;
 	}
 
-	void start( QSize scaledScreenSize, UpdateMode updateMode );
+	void start( QSize scaledScreenSize = {}, UpdateMode updateMode = UpdateMode::Monitoring );
 	void stop();
 
 	const Computer& computer() const
@@ -74,6 +74,8 @@ public:
 	{
 		return m_state;
 	}
+
+	bool hasValidFramebuffer() const;
 
 	const QSize& scaledScreenSize() const
 	{
@@ -96,14 +98,17 @@ public:
 		return m_userLoginName;
 	}
 
-	void setUserLoginName( const QString& userLoginName );
-
 	const QString& userFullName() const
 	{
 		return m_userFullName;
 	}
 
-	void setUserFullName( const QString& userFullName );
+	int userSessionId() const
+	{
+		return m_userSessionId;
+	}
+
+	void setUserInformation( const QString& userLoginName, const QString& userFullName, int sessionId );
 
 	const FeatureUidList& activeFeatures() const
 	{
@@ -138,9 +143,9 @@ public:
 		return m_updateMode;
 	}
 
-private:
 	Pointer weakPointer();
 
+private:
 	void resetWatchdog();
 	void restartConnection();
 
@@ -160,6 +165,7 @@ private:
 	State m_state;
 	QString m_userLoginName;
 	QString m_userFullName;
+	int m_userSessionId{0};
 	FeatureUidList m_activeFeatures;
 	Feature::Uid m_designatedModeFeature;
 
@@ -174,7 +180,7 @@ private:
 
 	QStringList m_groups;
 
-signals:
+Q_SIGNALS:
 	void featureMessageReceived( const FeatureMessage&, ComputerControlInterface::Pointer );
 	void screenUpdated( QRect rect );
 	void scaledScreenUpdated();
@@ -185,3 +191,5 @@ signals:
 };
 
 using ComputerControlInterfaceList = QVector<ComputerControlInterface::Pointer>;
+
+Q_DECLARE_METATYPE(ComputerControlInterface::Pointer)

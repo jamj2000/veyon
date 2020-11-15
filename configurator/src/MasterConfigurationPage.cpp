@@ -35,7 +35,8 @@
 #include "ui_MasterConfigurationPage.h"
 
 
-MasterConfigurationPage::MasterConfigurationPage() :
+MasterConfigurationPage::MasterConfigurationPage( QWidget* parent ) :
+	ConfigurationPage( parent ),
 	ui(new Ui::MasterConfigurationPage)
 {
 	ui->setupUi(this);
@@ -139,7 +140,8 @@ void MasterConfigurationPage::populateFeatureComboBox()
 
 	for( const auto& feature : m_featureManager.features() )
 	{
-		if( feature.testFlag( Feature::Master ) )
+		if( feature.testFlag( Feature::Master ) &&
+			feature.testFlag( Feature::Internal ) == false )
 		{
 			ui->computerDoubleClickFeature->addItem( QIcon( feature.iconUrl() ),
 													 feature.displayName(),
@@ -161,7 +163,8 @@ void MasterConfigurationPage::updateFeatureLists()
 	for( const auto& feature : qAsConst( m_featureManager.features() ) )
 	{
 		if( feature.testFlag( Feature::Master ) == false ||
-				feature == VeyonCore::builtinFeatures().monitoringMode().feature() )
+			feature.testFlag( Feature::Internal ) ||
+			feature == VeyonCore::builtinFeatures().monitoringMode().feature() )
 		{
 			continue;
 		}

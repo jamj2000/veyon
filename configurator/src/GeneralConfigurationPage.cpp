@@ -26,7 +26,6 @@
 #include <QMessageBox>
 
 #include "Configuration/UiMapping.h"
-#include "AuthenticationManager.h"
 #include "GeneralConfigurationPage.h"
 #include "Filesystem.h"
 #include "FileSystemBrowser.h"
@@ -41,25 +40,21 @@
 #include "ui_GeneralConfigurationPage.h"
 
 
-GeneralConfigurationPage::GeneralConfigurationPage() :
+GeneralConfigurationPage::GeneralConfigurationPage( QWidget* parent ) :
+	ConfigurationPage( parent ),
 	ui(new Ui::GeneralConfigurationPage)
 {
 	ui->setupUi(this);
 
 	// retrieve list of builtin translations and populate language combobox
 	QStringList languages;
-	const auto qmFiles = QDir( VeyonCore::translationsDirectory() ).entryList( { QStringLiteral("*.qm") } );
+	const auto qmFiles = QDir( VeyonCore::translationsDirectory() ).entryList( { QStringLiteral("veyon*.qm") } );
 
 	languages.reserve( qmFiles.count() );
 
 	for( const auto& qmFile : qmFiles )
 	{
-		// ignore Qt's translation files
-		if( qmFile.startsWith( QStringLiteral("qt") ) )
-		{
-			continue;
-		}
-		QLocale loc( qmFile );
+		QLocale loc( qmFile.split( QLatin1Char('_') ).mid( 1 ).join( QLatin1Char('_') ) );
 		if( loc.language() == QLocale::C )
 		{
 			loc = QLocale( QLocale::English );
@@ -73,17 +68,6 @@ GeneralConfigurationPage::GeneralConfigurationPage() :
 
 	ui->uiLanguage->addItems( languages );
 
-	const auto authenticationPlugin = VeyonCore::authenticationManager().availableTypes();
-	for( auto it = authenticationPlugin.constBegin(), end = authenticationPlugin.constEnd(); it != end; ++it )
-	{
-		if( it.value().isEmpty() == false )
-		{
-			ui->authenticationPlugin->addItem( it.value(), it.key() );
-		}
-	}
-
-	connect( ui->configureAuthenticationButton, &QPushButton::clicked, this, &GeneralConfigurationPage::configureAuthentication );
-	connect( ui->testAuthenticationButton, &QPushButton::clicked, this, &GeneralConfigurationPage::testAuthentication );
 	connect( ui->openLogFileDirectory, &QPushButton::clicked, this, &GeneralConfigurationPage::openLogFileDirectory );
 	connect( ui->clearLogFiles, &QPushButton::clicked, this, &GeneralConfigurationPage::clearLogFiles );
 
@@ -104,7 +88,6 @@ void GeneralConfigurationPage::resetWidgets()
 	FOREACH_VEYON_UI_CONFIG_PROPERTY(INIT_WIDGET_FROM_PROPERTY);
 	FOREACH_VEYON_LOGGING_CONFIG_PROPERTY(INIT_WIDGET_FROM_PROPERTY);
 	FOREACH_VEYON_NETWORK_OBJECT_DIRECTORY_CONFIG_PROPERTY(INIT_WIDGET_FROM_PROPERTY);
-	FOREACH_VEYON_AUTHENTICATION_CONFIG_PROPERTY(INIT_WIDGET_FROM_PROPERTY);
 }
 
 
@@ -114,7 +97,6 @@ void GeneralConfigurationPage::connectWidgetsToProperties()
 	FOREACH_VEYON_UI_CONFIG_PROPERTY(CONNECT_WIDGET_TO_PROPERTY);
 	FOREACH_VEYON_LOGGING_CONFIG_PROPERTY(CONNECT_WIDGET_TO_PROPERTY);
 	FOREACH_VEYON_NETWORK_OBJECT_DIRECTORY_CONFIG_PROPERTY(CONNECT_WIDGET_TO_PROPERTY);
-	FOREACH_VEYON_AUTHENTICATION_CONFIG_PROPERTY(CONNECT_WIDGET_TO_PROPERTY);
 }
 
 
@@ -124,26 +106,6 @@ void GeneralConfigurationPage::applyConfiguration()
 }
 
 
-
-void GeneralConfigurationPage::configureAuthentication()
-{
-	VeyonCore::authenticationManager().reloadConfiguration();
-	VeyonCore::authenticationManager().configuredPlugin()->configureCredentials();
-}
-
-
-
-void GeneralConfigurationPage::testAuthentication()
-{
-	VeyonCore::authenticationManager().reloadConfiguration();
-
-	if( VeyonCore::authenticationManager().configuredPlugin()->initializeCredentials() &&
-		VeyonCore::authenticationManager().configuredPlugin()->checkCredentials() )
-	{
-		QMessageBox::information( this, AuthenticationPluginInterface::authenticationTestTitle(),
-								  tr( "Authentication is set up properly on this computer." ) );
-	}
-}
 
 
 
@@ -187,7 +149,11 @@ void GeneralConfigurationPage::clearLogFiles()
 
 	for( const auto& f : localLogFiles )
 	{
-		if( f != QLatin1String("VeyonConfigurator.log") )
+		if( f.startsWith( QLatin1String("VeyonConfigurator") ) )
+		{
+			d.remove( f );
+		}
+		else
 		{
 			success &= d.remove( f );
 		}
@@ -224,7 +190,7 @@ void GeneralConfigurationPage::clearLogFiles()
 
 void GeneralConfigurationPage::populateNetworkObjectDirectories()
 {
-	const auto directories = NetworkObjectDirectoryManager().availableDirectories();
+	const auto directories = VeyonCore::networkObjectDirectoryManager().availableDirectories();
 
 	for( auto it = directories.constBegin(), end = directories.constEnd(); it != end; ++it )
 	{

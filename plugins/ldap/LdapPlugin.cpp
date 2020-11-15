@@ -22,14 +22,20 @@
  *
  */
 
+#include <QApplication>
+#include <QMessageBox>
+
+#include "AuthLdapConfigurationWidget.h"
+#include "AuthLdapDialog.h"
 #include "CommandLineIO.h"
 #include "ConfigurationManager.h"
 #include "LdapNetworkObjectDirectory.h"
 #include "LdapPlugin.h"
 #include "LdapConfigurationPage.h"
+#include "LdapConfigurationTest.h"
 #include "LdapDirectory.h"
+#include "VariantArrayMessage.h"
 #include "VeyonConfiguration.h"
-
 
 LdapPlugin::LdapPlugin( QObject* parent ) :
 	QObject( parent ),
@@ -37,10 +43,11 @@ LdapPlugin::LdapPlugin( QObject* parent ) :
 	m_ldapClient( nullptr ),
 	m_ldapDirectory( nullptr ),
 	m_commands( {
-{ QStringLiteral("autoconfigurebasedn"), tr( "Auto-configure the base DN via naming context" ) },
-{ QStringLiteral("query"), tr( "Query objects from LDAP directory" ) },
-{ QStringLiteral("help"), tr( "Show help about command" ) },
-				} )
+		{ QStringLiteral("autoconfigurebasedn"), tr( "Auto-configure the base DN via naming context" ) },
+		{ QStringLiteral("query"), tr( "Query objects from LDAP directory" ) },
+		{ QStringLiteral("testbind"), tr( "Test binding to an LDAP server" ) },
+		{ QStringLiteral("help"), tr( "Show help about command" ) }
+	} )
 {
 }
 
@@ -93,6 +100,146 @@ void LdapPlugin::upgrade( const QVersionNumber& oldVersion )
 		m_configuration.setComputerLocationAttribute( m_configuration.legacyComputerRoomAttribute() );
 		m_configuration.setLocationNameAttribute( m_configuration.legacyComputerRoomNameAttribute() );
 	}
+}
+
+
+
+QWidget* LdapPlugin::createAuthenticationConfigurationWidget()
+{
+	return new AuthLdapConfigurationWidget( m_authCore.configuration() );
+}
+
+
+
+bool LdapPlugin::initializeCredentials()
+{
+	m_authCore.clear();
+
+	if( qobject_cast<QApplication *>( QCoreApplication::instance() ) )
+	{
+		AuthLdapDialog logonDialog( m_configuration, QApplication::activeWindow() );
+		if( logonDialog.exec() == AuthLdapDialog::Accepted )
+		{
+			m_authCore.setUsername( logonDialog.username() );
+			m_authCore.setPassword( logonDialog.password() );
+
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
+bool LdapPlugin::hasCredentials() const
+{
+	return m_authCore.hasCredentials();
+}
+
+
+
+bool LdapPlugin::checkCredentials() const
+{
+	if( hasCredentials() == false )
+	{
+		vWarning() << "Invalid username or password!";
+
+		QMessageBox::critical( QApplication::activeWindow(),
+							   authenticationTestTitle(),
+							   tr( "The supplied username or password is wrong. Please enter valid credentials or "
+								   "switch to a different authentication method using the Veyon Configurator." ) );
+
+		return false;
+	}
+
+	return true;
+}
+
+
+
+VncServerClient::AuthState LdapPlugin::performAuthentication( VncServerClient* client, VariantArrayMessage& message ) const
+{
+	switch( client->authState() )
+	{
+	case VncServerClient::AuthState::Init:
+		client->setPrivateKey( CryptoCore::KeyGenerator().createRSA( CryptoCore::RsaKeySize ) );
+
+		if( VariantArrayMessage( message.ioDevice() ).write( client->privateKey().toPublicKey().toPEM() ).send() )
+		{
+			return VncServerClient::AuthState::Stage1;
+		}
+
+		vDebug() << "failed to send public key";
+		return VncServerClient::AuthState::Failed;
+
+	case VncServerClient::AuthState::Stage1:
+	{
+		auto privateKey = client->privateKey();
+
+		client->setUsername( message.read().toString() ); // Flawfinder: ignore
+		CryptoCore::PlaintextPassword encryptedPassword( message.read().toByteArray() ); // Flawfinder: ignore
+
+		CryptoCore::PlaintextPassword decryptedPassword;
+
+		if( privateKey.decrypt( encryptedPassword,
+								&decryptedPassword,
+								CryptoCore::DefaultEncryptionAlgorithm ) == false )
+		{
+			vWarning() << "failed to decrypt password";
+			return VncServerClient::AuthState::Failed;
+		}
+
+		vInfo() << "authenticating user" << client->username();
+
+		AuthLdapCore authCore;
+		authCore.setUsername( client->username() );
+		authCore.setPassword( decryptedPassword );
+
+		if( authCore.authenticate() )
+		{
+			vDebug() << "SUCCESS";
+			return VncServerClient::AuthState::Successful;
+		}
+
+		vDebug() << "FAIL";
+		return VncServerClient::AuthState::Failed;
+	}
+
+	default:
+		break;
+	}
+
+	return VncServerClient::AuthState::Failed;
+}
+
+
+
+bool LdapPlugin::authenticate( QIODevice* socket ) const
+{
+	VariantArrayMessage publicKeyMessage( socket );
+	publicKeyMessage.receive();
+
+	auto publicKey = CryptoCore::PublicKey::fromPEM( publicKeyMessage.read().toString() );
+
+	if( publicKey.canEncrypt() == false )
+	{
+		vCritical() << QThread::currentThreadId() << "can't encrypt with given public key!";
+		return false;
+	}
+
+	const auto encryptedPassword = publicKey.encrypt( m_authCore.password(), CryptoCore::DefaultEncryptionAlgorithm );
+	if( encryptedPassword.isEmpty() )
+	{
+		vCritical() << QThread::currentThreadId() << "password encryption failed!";
+		return false;
+	}
+
+	VariantArrayMessage response( socket );
+	response.write( m_authCore.username() );
+	response.write( encryptedPassword.toByteArray() );
+	response.send();
+
+	return true;
 }
 
 
@@ -248,10 +395,37 @@ CommandLinePluginInterface::RunResult LdapPlugin::handle_query( const QStringLis
 
 
 
+CommandLinePluginInterface::RunResult LdapPlugin::handle_testbind( const QStringList& arguments )
+{
+	Q_UNUSED(arguments)
+
+	const auto result = LdapConfigurationTest( m_configuration ).testBind();
+	if( result )
+	{
+		CommandLineIO::info( result.message );
+		return Successful;
+	}
+
+	CommandLineIO::error( result.message );
+	return Failed;
+}
+
+
+
 
 CommandLinePluginInterface::RunResult LdapPlugin::handle_help( const QStringList& arguments )
 {
 	QString command = arguments.value( 0 );
+
+	if( command == QLatin1String("testbind") )
+	{
+		printf( "\n"
+				"ldap testbind\n"
+				"\n"
+				"Test binding to the LDAP server using the current configuration.\n"
+				"\n\n" );
+		return NoResult;
+	}
 
 	if( command == QLatin1String("autoconfigurebasedn") )
 	{

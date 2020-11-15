@@ -39,19 +39,19 @@ class ServiceConfigurationPage : public ConfigurationPage
 {
 	Q_OBJECT
 public:
-	ServiceConfigurationPage();
+	ServiceConfigurationPage( QWidget* parent = nullptr );
 	~ServiceConfigurationPage() override;
 
 	void resetWidgets() override;
 	void connectWidgetsToProperties() override;
 	void applyConfiguration() override;
 
-public slots:
+public Q_SLOTS:
 	void startService();
 	void stopService();
 
 
-private slots:
+private Q_SLOTS:
 	void updateServiceControl();
 	void updateVncServerPluginConfigurationWidget();
 

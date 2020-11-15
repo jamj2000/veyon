@@ -52,9 +52,9 @@ public:
 
 	explicit VncServerClient( QObject* parent = nullptr ) :
 		QObject( parent ),
-		m_protocolState( VncServerProtocol::Disconnected ),
+		m_protocolState( VncServerProtocol::State::Disconnected ),
 		m_authState( AuthState::Init ),
-		m_authPluginUid(),
+		m_authMethodUid(),
 		m_accessControlState( AccessControlState::Init ),
 		m_username(),
 		m_hostAddress(),
@@ -82,14 +82,14 @@ public:
 		m_authState = authState;
 	}
 
-	Plugin::Uid authPluginUid() const
+	Plugin::Uid authMethodUid() const
 	{
-		return m_authPluginUid;
+		return m_authMethodUid;
 	}
 
-	void setAuthPluginUid( Plugin::Uid pluginUid )
+	void setAuthMethodUid( Plugin::Uid pluginUid )
 	{
-		m_authPluginUid = pluginUid;
+		m_authMethodUid = pluginUid;
 	}
 
 	AccessControlState accessControlState() const
@@ -147,19 +147,19 @@ public:
 		m_privateKey = privateKey;
 	}
 
-public slots:
+public Q_SLOTS:
 	void finishAccessControl()
 	{
-		emit accessControlFinished( this );
+		Q_EMIT accessControlFinished( this );
 	}
 
-signals:
+Q_SIGNALS:
 	void accessControlFinished( VncServerClient* );
 
 private:
 	VncServerProtocol::State m_protocolState;
 	AuthState m_authState;
-	Plugin::Uid m_authPluginUid;
+	Plugin::Uid m_authMethodUid;
 	AccessControlState m_accessControlState;
 	QElapsedTimer m_accessControlTimer;
 	QString m_username;

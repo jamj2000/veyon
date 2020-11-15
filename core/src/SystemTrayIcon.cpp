@@ -47,55 +47,39 @@ SystemTrayIcon::SystemTrayIcon( QObject* parent ) :
 
 
 void SystemTrayIcon::setToolTip( const QString& toolTipText,
-								 FeatureWorkerManager& featureWorkerManager )
+								FeatureWorkerManager& featureWorkerManager )
 {
-	if( featureWorkerManager.isWorkerRunning( m_systemTrayIconFeature ) == false )
-	{
-		featureWorkerManager.startWorker( m_systemTrayIconFeature, FeatureWorkerManager::UnmanagedSessionProcess );
-	}
-
 	FeatureMessage featureMessage( m_systemTrayIconFeature.uid(), SetToolTipCommand );
-	featureMessage.addArgument( ToolTipTextArgument, toolTipText );
+	featureMessage.addArgument( Argument::ToolTipText, toolTipText );
 
-	featureWorkerManager.sendMessage( featureMessage );
+	featureWorkerManager.sendMessageToUnmanagedSessionWorker( featureMessage );
 }
 
 
 
 void SystemTrayIcon::showMessage( const QString& messageTitle,
-								  const QString& messageText,
-								  FeatureWorkerManager& featureWorkerManager  )
+								 const QString& messageText,
+								 FeatureWorkerManager& featureWorkerManager  )
 {
-	if( featureWorkerManager.isWorkerRunning( m_systemTrayIconFeature ) == false )
-	{
-		featureWorkerManager.startWorker( m_systemTrayIconFeature, FeatureWorkerManager::UnmanagedSessionProcess );
-	}
-
 	FeatureMessage featureMessage( m_systemTrayIconFeature.uid(), ShowMessageCommand );
-	featureMessage.addArgument( MessageTitleArgument, messageTitle );
-	featureMessage.addArgument( MessageTextArgument, messageText );
+	featureMessage.addArgument( Argument::MessageTitle, messageTitle );
+	featureMessage.addArgument( Argument::MessageText, messageText );
 
-	featureWorkerManager.sendMessage( featureMessage );
+	featureWorkerManager.sendMessageToUnmanagedSessionWorker( featureMessage );
 }
 
 
 
 bool SystemTrayIcon::handleFeatureMessage( VeyonServerInterface& server,
-										   const MessageContext& messageContext,
-										   const FeatureMessage& message )
+										  const MessageContext& messageContext,
+										  const FeatureMessage& message )
 {
 	Q_UNUSED(messageContext)
 
 	if( m_systemTrayIconFeature.uid() == message.featureUid() )
 	{
 		// forward message to worker
-		if( server.featureWorkerManager().isWorkerRunning( m_systemTrayIconFeature ) == false )
-		{
-			server.featureWorkerManager().startWorker( m_systemTrayIconFeature, FeatureWorkerManager::UnmanagedSessionProcess );
-		}
-
-		server.featureWorkerManager().sendMessage( message );
-
+		server.featureWorkerManager().sendMessageToUnmanagedSessionWorker( message );
 		return true;
 	}
 
@@ -131,21 +115,21 @@ bool SystemTrayIcon::handleFeatureMessage( VeyonWorkerInterface& worker, const F
 	case SetToolTipCommand:
 		if( m_systemTrayIcon )
 		{
-			m_systemTrayIcon->setToolTip( message.argument( ToolTipTextArgument ).toString() );
+			m_systemTrayIcon->setToolTip( message.argument( Argument::ToolTipText ).toString() );
 		}
 		return true;
 
 	case ShowMessageCommand:
 		if( m_systemTrayIcon )
 		{
-			m_systemTrayIcon->showMessage( message.argument( MessageTitleArgument ).toString(),
-										   message.argument( MessageTextArgument ).toString() );
+			m_systemTrayIcon->showMessage( message.argument( Argument::MessageTitle ).toString(),
+										   message.argument( Argument::MessageText ).toString() );
 		}
 		else
 		{
 			QMessageBox::information( nullptr,
-									  message.argument( MessageTitleArgument ).toString(),
-									  message.argument( MessageTextArgument ).toString() );
+									  message.argument( Argument::MessageTitle ).toString(),
+									  message.argument( Argument::MessageText ).toString() );
 		}
 		return true;
 
