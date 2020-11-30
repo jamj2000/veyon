@@ -71,6 +71,7 @@ public:
 
 Q_SIGNALS:
 	void activeFeaturesChanged( QModelIndex );
+	void computerScreenSizeChanged();
 
 private:
 	void update();
@@ -87,8 +88,7 @@ private:
 
 	double averageAspectRatio() const;
 
-	void loadIcons();
-	QImage prepareIcon( const QImage& icon );
+	QImage scaleAndAlignIcon( const QImage& icon, QSize size ) const;
 	QImage computerDecorationRole( const ComputerControlInterface::Pointer& controlInterface ) const;
 	QString computerToolTipRole( const ComputerControlInterface::Pointer& controlInterface ) const;
 	QString computerDisplayRole( const ComputerControlInterface::Pointer& controlInterface ) const;
@@ -100,9 +100,9 @@ private:
 	VeyonMaster* m_master;
 
 	QString m_imageProviderId{ QStringLiteral("computers") };
-	QImage m_iconDefault{};
-	QImage m_iconConnectionProblem{};
-	QImage m_iconDemoMode{};
+	QImage m_iconDefault;
+	QImage m_iconConnectionProblem;
+	QImage m_iconServerNotRunning;
 
 	QSize m_computerScreenSize{};
 

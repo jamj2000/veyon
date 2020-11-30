@@ -77,6 +77,8 @@ public:
 
 	bool hasValidFramebuffer() const;
 
+	QSize screenSize() const;
+
 	const QSize& scaledScreenSize() const
 	{
 		return m_scaledScreenSize;
@@ -182,6 +184,7 @@ private:
 
 Q_SIGNALS:
 	void featureMessageReceived( const FeatureMessage&, ComputerControlInterface::Pointer );
+	void screenSizeChanged();
 	void screenUpdated( QRect rect );
 	void scaledScreenUpdated();
 	void userChanged();

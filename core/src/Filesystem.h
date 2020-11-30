@@ -28,15 +28,21 @@
 
 // clazy:excludeall=rule-of-three
 
-class VEYON_CORE_EXPORT Filesystem
+class VEYON_CORE_EXPORT Filesystem : public QObject
 {
+	Q_OBJECT
 public:
 	QString expandPath( QString path ) const;
 	QString shrinkPath( QString path ) const;
 	bool ensurePathExists( const QString &path ) const;
 
+	QString screenshotDirectoryPath() const;
+
 	QString serviceFilePath() const;
 	QString serverFilePath() const;
 	QString workerFilePath() const;
+
+Q_SIGNALS:
+	void screenshotDirectoryModified();
 
 };

@@ -58,7 +58,7 @@ void Screenshot::take( const ComputerControlInterface::Pointer& computerControlI
 		userLogin = tr( "unknown" );
 	}
 
-	const auto dir = VeyonCore::filesystem().expandPath( VeyonCore::config().screenshotDirectory() );
+	const auto dir = VeyonCore::filesystem().screenshotDirectoryPath();
 
 	if( VeyonCore::filesystem().ensurePathExists( dir ) == false )
 	{
@@ -146,6 +146,8 @@ void Screenshot::take( const ComputerControlInterface::Pointer& computerControlI
 	m_image.setText( metaDataKey( MetaData::Time ), time );
 
 	m_image.save( &outputFile, "PNG", 50 );
+
+	Q_EMIT VeyonCore::filesystem().screenshotDirectoryModified();
 }
 
 

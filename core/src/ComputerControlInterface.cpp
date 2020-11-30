@@ -93,6 +93,8 @@ void ComputerControlInterface::start( QSize scaledScreenSize, UpdateMode updateM
 			Q_EMIT scaledScreenUpdated();
 		} );
 
+		connect( m_vncConnection, &VncConnection::framebufferSizeChanged, this, &ComputerControlInterface::screenSizeChanged );
+
 		connect( m_vncConnection, &VncConnection::stateChanged, this, &ComputerControlInterface::updateState );
 		connect( m_vncConnection, &VncConnection::stateChanged, this, &ComputerControlInterface::updateUser );
 		connect( m_vncConnection, &VncConnection::stateChanged, this, &ComputerControlInterface::updateActiveFeatures );
@@ -133,6 +135,13 @@ void ComputerControlInterface::stop()
 bool ComputerControlInterface::hasValidFramebuffer() const
 {
 	return m_vncConnection->hasValidFramebuffer();
+}
+
+
+
+QSize ComputerControlInterface::screenSize() const
+{
+	return m_vncConnection->image().size();
 }
 
 
@@ -309,7 +318,7 @@ void ComputerControlInterface::updateState()
 		case VncConnection::State::Connecting: m_state = State::Connecting; break;
 		case VncConnection::State::Connected: m_state = State::Connected; break;
 		case VncConnection::State::HostOffline: m_state = State::HostOffline; break;
-		case VncConnection::State::ServiceUnreachable: m_state = State::ServiceUnreachable; break;
+		case VncConnection::State::ServerNotRunning: m_state = State::ServerNotRunning; break;
 		case VncConnection::State::AuthenticationFailed: m_state = State::AuthenticationFailed; break;
 		default: m_state = VncConnection::State::Disconnected; break;
 		}

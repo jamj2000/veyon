@@ -39,13 +39,14 @@
 ComputerControlListModel::ComputerControlListModel( VeyonMaster* masterCore, QObject* parent ) :
 	ComputerListModel( parent ),
 	QQuickImageProvider( QQmlImageProviderBase::Image ),
-	m_master( masterCore )
+	m_master( masterCore ),
+	m_iconDefault( QStringLiteral(":/master/preferences-desktop-display-gray.png") ),
+	m_iconConnectionProblem( QStringLiteral(":/master/preferences-desktop-display-red.png") ),
+	m_iconServerNotRunning( QStringLiteral(":/master/preferences-desktop-display-orange.png") )
 {
 #if defined(QT_TESTLIB_LIB) && QT_VERSION >= QT_VERSION_CHECK(5, 11, 0)
 	new QAbstractItemModelTester( this, QAbstractItemModelTester::FailureReportingMode::Warning, this );
 #endif
-
-	loadIcons();
 
 	connect( &m_master->computerManager(), &ComputerManager::computerSelectionReset,
 			 this, &ComputerControlListModel::reload );
@@ -176,7 +177,7 @@ QImage ComputerControlListModel::requestImage( const QString& id, QSize* size, c
 
 void ComputerControlListModel::updateComputerScreenSize()
 {
-	auto ratio = 1.0;
+	auto ratio = 16.0 / 9.0;
 
 	switch( aspectRatio() )
 	{
@@ -188,12 +189,24 @@ void ComputerControlListModel::updateComputerScreenSize()
 
 	}
 
-	m_computerScreenSize = { m_master->userConfig().monitoringScreenSize(),
-							 int(m_master->userConfig().monitoringScreenSize() / ratio) };
+	const QSize newSize{ m_master->userConfig().monitoringScreenSize(),
+						 int(m_master->userConfig().monitoringScreenSize() / ratio) };
 
 	for( auto& controlInterface : m_computerControlInterfaces )
 	{
-		controlInterface->setScaledScreenSize( m_computerScreenSize );
+		controlInterface->setScaledScreenSize( newSize );
+	}
+
+	if( m_computerScreenSize != newSize )
+	{
+		m_computerScreenSize = newSize;
+
+		for( int i = 0; i < rowCount(); ++i )
+		{
+			updateScreen( index( i ) );
+		}
+
+		Q_EMIT computerScreenSizeChanged();
 	}
 }
 
@@ -296,6 +309,8 @@ void ComputerControlListModel::update()
 
 		++row;
 	}
+
+	updateComputerScreenSize();
 }
 
 
@@ -351,6 +366,9 @@ void ComputerControlListModel::startComputerControlInterface( ComputerControlInt
 				 m_master->featureManager().handleFeatureMessage( computerControlInterface, featureMessage );
 	} );
 
+	connect( controlInterface, &ComputerControlInterface::screenSizeChanged,
+			 this, &ComputerControlListModel::updateComputerScreenSize );
+
 	connect( controlInterface, &ComputerControlInterface::scaledScreenUpdated,
 			 this, [=] () { updateScreen( interfaceIndex( controlInterface ) ); } );
 
@@ -384,7 +402,7 @@ double ComputerControlListModel::averageAspectRatio() const
 
 	for( const auto& controlInterface : m_computerControlInterfaces )
 	{
-		const auto currentSize = controlInterface->screen().size();
+		const auto currentSize = controlInterface->screenSize();
 		if( currentSize.isValid() )
 		{
 			size += currentSize;
@@ -396,53 +414,49 @@ double ComputerControlListModel::averageAspectRatio() const
 
 
 
-void ComputerControlListModel::loadIcons()
+QImage ComputerControlListModel::scaleAndAlignIcon( const QImage& icon, QSize size ) const
 {
-	m_iconDefault = prepareIcon( QImage( QStringLiteral(":/master/preferences-desktop-display-gray.png") ) );
-	m_iconConnectionProblem = prepareIcon( QImage( QStringLiteral(":/master/preferences-desktop-display-red.png") ) );
-	m_iconDemoMode = prepareIcon( QImage( QStringLiteral(":/master/preferences-desktop-display-orange.png") ) );
-}
+	const auto scaledIcon = icon.scaled( size.width(), size.height(), Qt::KeepAspectRatio );
 
+	QImage scaledAndAlignedIcon( size, QImage::Format_ARGB32 );
+	scaledAndAlignedIcon.fill( Qt::transparent );
 
+	QPainter painter( &scaledAndAlignedIcon );
+	painter.drawImage( ( scaledAndAlignedIcon.width() - scaledIcon.width() ) / 2,
+					   ( scaledAndAlignedIcon.height() - scaledIcon.height() ) / 2,
+					   scaledIcon );
 
-QImage ComputerControlListModel::prepareIcon(const QImage &icon)
-{
-	QImage wideIcon( icon.width() * 16 / 9, icon.height(), QImage::Format_ARGB32 );
-	wideIcon.fill( Qt::transparent );
-	QPainter p( &wideIcon );
-	p.drawImage( ( wideIcon.width() - icon.width() ) / 2, 0, icon );
-	return wideIcon;
+	return scaledAndAlignedIcon;
 }
 
 
 
 QImage ComputerControlListModel::computerDecorationRole( const ComputerControlInterface::Pointer& controlInterface ) const
 {
-	QImage image;
-
 	switch( controlInterface->state() )
 	{
 	case ComputerControlInterface::State::Connected:
-		image = controlInterface->scaledScreen();
+	{
+		const auto image = controlInterface->scaledScreen();
 		if( image.isNull() == false )
 		{
 			return image;
 		}
 
-		image = m_iconDefault;
-		break;
+		return scaleAndAlignIcon( m_iconDefault, controlInterface->scaledScreenSize() );
+	}
+
+	case ComputerControlInterface::State::ServerNotRunning:
+		return scaleAndAlignIcon( m_iconServerNotRunning, controlInterface->scaledScreenSize() );
 
 	case ComputerControlInterface::State::AuthenticationFailed:
-	case ComputerControlInterface::State::ServiceUnreachable:
-		image = m_iconConnectionProblem;
-		break;
+		return scaleAndAlignIcon( m_iconConnectionProblem, controlInterface->scaledScreenSize() );
 
 	default:
-		image = m_iconDefault;
 		break;
 	}
 
-	return image.scaled( controlInterface->scaledScreenSize(), Qt::KeepAspectRatio );
+	return scaleAndAlignIcon( m_iconDefault, controlInterface->scaledScreenSize() );
 }
 
 
@@ -490,7 +504,7 @@ QString ComputerControlListModel::computerDisplayRole( const ComputerControlInte
 		return controlInterface->computer().name();
 	}
 
-	return {};
+	return tr("[no user]");
 }
 
 
@@ -534,8 +548,8 @@ QString ComputerControlListModel::computerStateDescription( const ComputerContro
 	case ComputerControlInterface::State::HostOffline:
 		return tr( "Computer offline or switched off" );
 
-	case ComputerControlInterface::State::ServiceUnreachable:
-		return tr( "Service unreachable or not running" );
+	case ComputerControlInterface::State::ServerNotRunning:
+		return tr( "Veyon Server unreachable or not running" );
 
 	case ComputerControlInterface::State::AuthenticationFailed:
 		return tr( "Authentication failed or access denied" );
